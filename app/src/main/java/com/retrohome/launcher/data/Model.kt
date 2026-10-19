@@ -35,6 +35,8 @@ data class Settings(
     val customMusic: String? = null,
     /** Порядок игр на вкладках консолей: name, recent, playtime. */
     val sortGames: String = "name",
+    /** Чем листать игры в ряду: dpad — крестовина, triggers — курки L2/R2, both — и тем и другим. */
+    val carouselKeys: String = "dpad",
     /** A на игре открывает её страницу (false — сразу запускает). */
     val gamePage: Boolean = true,
     /** Тема оформления: night, oled, graphite, light. */

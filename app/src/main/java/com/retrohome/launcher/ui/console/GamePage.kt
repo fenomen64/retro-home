@@ -33,6 +33,9 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.alpha
@@ -150,9 +153,18 @@ fun GamePage(
 ) {
     val s = LocalStrings.current
     val buttons = pageButtons(e)
+    val swipeMin = with(LocalDensity.current) { 72.dp.toPx() }
     Box(
         Modifier
             .fillMaxSize()
+            // Телефон без бамперов: свайп влево/вправо по странице — следующая/предыдущая игра
+            .then(if (!canSwitch) Modifier else Modifier.pointerInput(e.key) {
+                var dx = 0f
+                detectHorizontalDragGestures(
+                    onDragStart = { dx = 0f },
+                    onDragEnd = { if (kotlin.math.abs(dx) > swipeMin) onSwitch(if (dx < 0) 1 else -1) },
+                ) { change, amount -> dx += amount; change.consume() }
+            })
             .background(Brush.verticalGradient(listOf(Palette.bgTop, Palette.bgBottom)))
             // Касания не проходят к экрану под страницей
             .clickable(remember { MutableInteractionSource() }, null) {}
@@ -194,6 +206,11 @@ fun GamePage(
                             e.label, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(14.dp),
                         )
+                        // Стрелки для пальца: предыдущая и следующая игра (на консоли — L1/R1)
+                        if (canSwitch) {
+                            SwitchArrow("‹", Modifier.align(Alignment.CenterStart).testTag("prevGame")) { onSwitch(-1) }
+                            SwitchArrow("›", Modifier.align(Alignment.CenterEnd).testTag("nextGame")) { onSwitch(1) }
+                        }
                     }
                     Spacer(Modifier.width(32.dp))
                     Column(Modifier.weight(1f).fillMaxHeight()) {
@@ -467,3 +484,20 @@ internal fun Modifier.fadingSides(state: androidx.compose.foundation.lazy.LazyLi
             blendMode = BlendMode.DstIn,
         )
     }
+
+
+/** Полупрозрачная круглая стрелка у края обложки — переключить игру пальцем. */
+@Composable
+private fun SwitchArrow(glyph: String, modifier: Modifier, onClick: () -> Unit) {
+    Box(
+        modifier
+            .padding(6.dp)
+            .size(44.dp)
+            .clip(RoundedCornerShape(50))
+            .background(Color.Black.copy(alpha = 0.38f))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(glyph, color = Color.White.copy(alpha = 0.92f), fontSize = 26.sp, fontWeight = FontWeight.Bold)
+    }
+}

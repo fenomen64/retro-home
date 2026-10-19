@@ -132,7 +132,63 @@ class SwitchMirrorTest {
         assertTrue(games.all { m[it.id]?.descEn?.startsWith("About") == true })
         // tinfoil пробовали лишь в начале (несколько игр грузятся параллельно), а не для каждой из шести
         assertTrue(calls.count { "tinfoil.media" in it }.toString(), calls.count { "tinfoil.media" in it } <= 8)
-        assertTrue(DiagLog.snapshot().any { "беру данные Switch из запасного источника" in it })
+        assertTrue(DiagLog.snapshot().any { "беру данные Switch из других источников" in it })
+    }
+
+    // Ответ поиска Nintendo Europe в настоящем формате (поля как на searching.nintendo-europe.com)
+    private fun eu(id: String, title: String, box: String? = null, square: String? = "https://assets.nintendo.eu/sq/$id.jpg", system: String = "Nintendo Switch") =
+        """{"response":{"numFound":1,"docs":[{"title":"$title","application_id_s":"${id.lowercase()}",""" +
+            (box?.let { "\"image_url\":\"$it\"," } ?: "") + (square?.let { "\"image_url_sq_s\":\"$it\"," } ?: "") +
+            """"image_url_h16x9_s":"https://assets.nintendo.eu/wide/$id.jpg","system_names_txt":["$system"]}]}}"""
+
+    @Test fun nintendoEuropeIsTheFirstCoverSource() {
+        val keep = Game("kd", "/ROMs/switch/Keep Driving [0100F57025F44000][v0].nsp", GameSystem.SWITCH, "Keep Driving", emptyList(), "switch")
+        val r = repo { url ->
+            when {
+                url.startsWith("https://searching.nintendo-europe.com/") && "application_id_s:0100f57025f44000" in url ->
+                    HttpResponse(200, eu("0100F57025F44000", "Keep Driving", box = "https://www.nintendo.com/eu/box/kd.jpg").toByteArray())
+                url == "https://www.nintendo.com/eu/box/kd.jpg" -> HttpResponse(200, jpg)
+                "assets.nintendo.eu/wide" in url -> HttpResponse(200, jpg)
+                "tinfoil.media" in url -> HttpResponse(500)
+                "wikipedia.org" in url && "list=search" in url -> HttpResponse(200, """{"query":{"search":[]}}""".toByteArray())
+                "wbsearchentities" in url -> HttpResponse(200, """{"search":[]}""".toByteArray())
+                else -> HttpResponse(404)
+            }
+        }
+        val m = waitFor(r, keep)
+        assertNotNull("обложка — коробка из базы Nintendo", m.cover)
+        assertEquals("Keep Driving", m.name)
+        // За иконкой к tinfoil и Nlib уже не ходили
+        assertTrue(calls.none { "tinfoil.media/ti/" in it || "/icon/" in it })
+    }
+
+    @Test fun switchIdFoundByNameWhenNoListAndNoIdInFileName() {
+        val g = Game("ab", "/ROMs/switch/Absolum.nsp", GameSystem.SWITCH, "Absolum", emptyList(), "switch")
+        val r = repo { url ->
+            when {
+                url.startsWith("https://searching.nintendo-europe.com/") && "q=Absolum" in url ->
+                    HttpResponse(200, eu("0100A83022A22000", "Absolum").toByteArray())
+                url.startsWith("https://searching.nintendo-europe.com/") && "application_id_s:0100a83022a22000" in url ->
+                    HttpResponse(200, eu("0100A83022A22000", "Absolum").toByteArray())
+                "assets.nintendo.eu" in url -> HttpResponse(200, jpg)
+                "tinfoil.media" in url -> dnsFail
+                else -> HttpResponse(404)
+            }
+        }
+        r.refetch(g, "Absolum")
+        val end = System.currentTimeMillis() + 30_000
+        while (System.currentTimeMillis() < end && r.meta.value["ab"]?.cover == null) Thread.sleep(50)
+        assertNotNull(r.meta.value["ab"]?.cover)
+        assertTrue(DiagLog.snapshot().any { "Title ID 0100A83022A22000 найден поиском Nintendo" in it })
+    }
+
+    @Test fun euParsing() {
+        val games = SwitchDb.parseEu(eu("0100A7C01B792000", "Minecraft Dungeons II™", box = null) )
+        assertEquals("Minecraft Dungeons II", games.single().title)
+        assertEquals("0100A7C01B792000", games.single().id)
+        // Версия для Switch 2 с тем же номером — не берём, если есть для Switch
+        val both = SwitchDb.parseEu(eu("0100A7C01B792000", "MD2", system = "Nintendo Switch 2")) + games
+        assertEquals("Nintendo Switch", SwitchDb.pickEu(both, "0100A7C01B792000")!!.systems.single())
     }
 
     @Test fun nlibParsing() {

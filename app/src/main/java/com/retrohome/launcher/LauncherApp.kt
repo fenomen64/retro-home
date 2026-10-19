@@ -313,10 +313,10 @@ class LauncherController(
             if (recipe.id == "lemuroid" && com.retrohome.launcher.data.Lemuroid.idFor(titles) == null) {
                 // Lemuroid открылся на своём списке игр — подсказать, как запускать сразу
                 val home = com.retrohome.launcher.data.Lemuroid.canReceiveShortcuts(context)
-                toast(if (home) strings.emu.lemuroidHint else strings.emu.lemuroidHintNotHome)
+                toast(if (home) strings.ext.emu.lemuroidHint else strings.ext.emu.lemuroidHintNotHome)
             }
             // Vita3K открылся на своём списке: номер игры не нашёлся
-            if (game.system == GameSystem.VITA && base.titleId == null) toast(strings.emu.vitaNoId)
+            if (game.system == GameSystem.VITA && base.titleId == null) toast(strings.ext.emu.vitaNoId)
             recordRecent(key)
             // Время в игре: точно по статистике Android, если есть доступ, иначе — до возврата в лаунчер
             settleSession()
@@ -399,6 +399,10 @@ class LauncherController(
         if (id == "home") return@update d
         val h = d.settings.hiddenTabs
         d.copy(settings = d.settings.copy(hiddenTabs = if (id in h) h - id else h + id))
+    }
+
+    fun cycleCarouselKeys(dir: Int = 1) = store.update { d ->
+        d.copy(settings = d.settings.copy(carouselKeys = listOf("dpad", "triggers", "both").cycle(d.settings.carouselKeys, dir)))
     }
 
     fun cycleSortGames(dir: Int = 1) = store.update { d ->

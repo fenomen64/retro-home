@@ -78,6 +78,7 @@ cd retro-home
 | thumbnails.libretro.com | обложки и снимки из игр |
 | wikipedia.org, wikidata.org | описания и факты; если вы указали почту, она передаётся в подписи запросов, как требуют правила Википедии |
 | raw.githubusercontent.com, api.github.com | запасной источник обложек (репозитории libretro-thumbnails), если сайт libretro недоступен |
+| searching.nintendo-europe.com, nintendo.com, assets.nintendo.eu | обложки игр Switch (каталог Nintendo Europe, поиск по Title ID) |
 | tinfoil.media | обложки и описания игр Switch |
 | api.nlib.cc | запасной источник данных Switch (база TitleDB), если tinfoil недоступен |
 | retroachievements.org, media.retroachievements.org | достижения (только если вы указали аккаунт; ключ уходит только туда) |
@@ -119,7 +120,7 @@ Download the APK from [Releases](../../releases), set Retro Home as the default 
 JDK 21 and the Android SDK (compileSdk 36): `./gradlew testDebugUnitTest assembleDebug`. To sign with your own key, copy `keystore.properties.example` to `keystore.properties`.
 
 ### Privacy
-No analytics or tracking. The only network requests go to libretro thumbnails (with the libretro-thumbnails GitHub repos as a fallback), Wikipedia/Wikidata, tinfoil.media and api.nlib.cc (Switch) and RetroAchievements (only if you add your account).
+No analytics or tracking. The only network requests go to libretro thumbnails (with the libretro-thumbnails GitHub repos as a fallback), Wikipedia/Wikidata, the Nintendo Europe catalog, tinfoil.media and api.nlib.cc (Switch) and RetroAchievements (only if you add your account).
 
 ### License
 [GNU GPL v3.0](LICENSE).

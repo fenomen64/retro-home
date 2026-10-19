@@ -6,6 +6,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
@@ -72,6 +73,7 @@ fun MainScreen(
     val s = LocalStrings.current
     val console = LocalAppMode.current || isConsoleMode(data.settings.mode, landscape)
     val stack = remember { mutableStateListOf<Screen>() }
+    val settingsNav = remember { SettingsNav() }
     val consoleState = remember { ConsoleState() }
     val phoneState = remember { PhoneState() }
     LaunchedEffect(console, stack.size, phoneState.drawerOpen) {
@@ -106,6 +108,8 @@ fun MainScreen(
     fun push(sc: Screen) {
         consoleState.overlay = null
         phoneState.sheet = null
+        // Настройки открывают заново (из меню) — с начала; возврат из вложенных экранов — на прежнее место
+        if (sc == Screen.SETTINGS && Screen.SETTINGS !in stack) settingsNav.reset()
         stack.remove(sc)
         stack.add(sc)
     }
@@ -218,6 +222,7 @@ fun MainScreen(
             override fun cycleMusicVolume(dir: Int) = controller.cycleMusicVolume(dir)
             override fun pickMusic() = onPickMusic()
             override fun cycleSortGames(dir: Int) = controller.cycleSortGames(dir)
+            override fun cycleCarouselKeys(dir: Int) = controller.cycleCarouselKeys(dir)
             override fun toggleGamePage() = controller.toggleGamePage()
             override fun cycleTheme(dir: Int) = controller.cycleTheme(dir)
             override fun cycleAccent(dir: Int) = controller.cycleAccent(dir)
@@ -251,6 +256,7 @@ fun MainScreen(
                 audio = AudioState(data.settings.sfxPack, data.settings.music),
                 gamePage = data.settings.gamePage,
                 gameSort = data.settings.sortGames,
+                carouselKeys = data.settings.carouselKeys,
                 tabColors = data.settings.tabColors,
                 ra = raState,
             )
@@ -274,18 +280,21 @@ fun MainScreen(
             )
         }
 
+        // Звуки навигации на экранах-списках — в консольном режиме, как и везде в нём
+        CompositionLocalProvider(LocalScreenSounds provides console) {
         when (stack.lastOrNull()) {
             Screen.SETTINGS -> SettingsScreen(
                 data.settings, version, console, ::pop, settingsActions,
                 romsLabel = if (hasFolder) data.settings.romsTree?.let { romsLabel(it) } else null,
                 usageAccess = usageAccess,
                 iconPackName = remember(data.settings.iconPack) { controller.iconPackName(data.settings.iconPack) },
+                nav = settingsNav,
             )
             Screen.NETWORK_CHECK -> NetworkCheckScreen(::pop) { onEach -> controller.checkNetwork(onEach) }
             Screen.DIAGNOSTICS -> DiagnosticsScreen(
                 ::pop,
                 report = controller::diagnostics,
-                onShare = { controller.shareText(it, s.diag.title) },
+                onShare = { controller.shareText(it, s.ext.diag.title) },
                 onCopy = controller::copyText,
                 onRetry = controller::refreshMeta,
             )
@@ -372,6 +381,7 @@ fun MainScreen(
                 }
             }
             null -> {}
+        }
         }
     }
 }

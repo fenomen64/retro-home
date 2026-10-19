@@ -18,6 +18,8 @@ object NetworkCheck {
         Target("wikiEn", "https://en.wikipedia.org/w/api.php?action=query&meta=siteinfo&format=json"),
         Target("wikiRu", "https://ru.wikipedia.org/w/api.php?action=query&meta=siteinfo&format=json"),
         Target("wikidata", "https://www.wikidata.org/w/api.php?action=query&meta=siteinfo&format=json"),
+        // Обложки Switch — первым делом из базы Nintendo Europe
+        Target("switchEu", "https://searching.nintendo-europe.com/en/select?q=*&fq=application_id_s:0100f2c0115b6000&rows=1&wt=json&fl=title"),
         Target("switch", "https://tinfoil.media/"),
         // Запасной источник данных Switch, если tinfoil недоступен
         Target("switchMirror", "https://api.nlib.cc/nx/0100F2C0115B6000?fields=name"),

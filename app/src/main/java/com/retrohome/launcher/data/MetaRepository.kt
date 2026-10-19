@@ -147,7 +147,7 @@ class MetaRepository(
         if (job?.isActive == true && (!retryMissing || jobRetry)) { DiagLog.add("Загрузка уже идёт — новый запуск пропущен"); return }
         job?.cancel()
         jobRetry = retryMissing
-        if (retryMissing) { indexFailedAt.clear(); tinfoilDownUntil = 0 }
+        if (retryMissing) { indexFailedAt.clear(); downUntil.clear() }
         job = scope.launch(Dispatchers.IO) {
             if (!online()) { DiagLog.add("Загрузка не начата: Android сообщает, что интернета нет"); return@launch }
             val visual = games.filter { needsVisual(_meta.value[it.id], retryMissing) }
@@ -593,35 +593,56 @@ class MetaRepository(
         return SwitchIndex(entries).also { switchIndex = it }
     }
 
-    /** tinfoil.media не отвечал — до этого времени сразу берём данные Switch из Nlib, не дожидаясь его. */
-    @Volatile private var tinfoilDownUntil = 0L
+    /** Сайты, которые не отвечали: до этого времени к ним не обращаемся. */
+    private val downUntil = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
     /**
-     * Запрос к tinfoil.media. После сбоя (таймаут, ошибка сервера, нет адреса) 10 минут не ждём его:
-     * каждый зависший запрос — до пары минут, а игр много. Пропуск считается сбоем сети,
-     * чтобы игра, которой нет в запасном источнике, не записалась как «не найдено».
+     * Запрос к сайту, который бывает недоступен (tinfoil.media, поиск Nintendo). После сбоя
+     * (таймаут, ошибка сервера, нет адреса) 10 минут не ждём его: каждый зависший запрос —
+     * до пары минут, а игр много. Пропуск считается сбоем сети, чтобы игра, которой нет
+     * в других источниках, не записалась как «не найдено».
      */
-    private fun tinfoil(url: String): ByteArray? {
-        if (System.currentTimeMillis() < tinfoilDownUntil) {
+    private fun flaky(site: String, url: String): ByteArray? {
+        if (System.currentTimeMillis() < (downUntil[site] ?: 0)) {
             netErrors.set(errorsHere() + 1)
-            if (lastProblem.get() == null) lastProblem.set("tinfoil.media недоступен, повтор позже")
+            if (lastProblem.get() == null) lastProblem.set("$site недоступен, повтор позже")
             return null
         }
         val before = errorsHere()
         val bytes = getBytes(url)
         if (bytes == null && errorsHere() > before) {
-            tinfoilDownUntil = System.currentTimeMillis() + 10 * 60_000
-            DiagLog.add("tinfoil.media не отвечает (${lastProblem.get() ?: "?"}) — 10 минут беру данные Switch из запасного источника (api.nlib.cc)")
+            downUntil[site] = System.currentTimeMillis() + 10 * 60_000
+            DiagLog.add("$site не отвечает (${lastProblem.get() ?: "?"}) — 10 минут беру данные Switch из других источников")
         }
         return bytes
+    }
+
+    private fun tinfoil(url: String) = flaky("tinfoil.media", url)
+    private fun nintendo(url: String) = flaky("nintendo-europe.com", url)
+
+    /** Title ID по названию — поиском в базе Nintendo (когда в имени файла номера нет, а списка tinfoil нет). */
+    private fun idByNintendoSearch(name: String): String? {
+        val found = nintendo(SwitchDb.euByNameUrl(name))?.let { SwitchDb.parseEu(String(it)) }.orEmpty()
+        val want = Thumbnails.Index(listOf(name))
+        // Берём только игру с тем же названием (без учёта знаков и регистра), а не первую попавшуюся
+        val hit = found.firstOrNull { "Nintendo Switch" in it.systems && Thumbnails.match(it.title, want, null) != null }
+        if (hit != null) DiagLog.add("[SWITCH] «$name»: Title ID ${hit.id} найден поиском Nintendo")
+        return hit?.id
     }
 
     /** Поиск игры Switch: Title ID из имени файла или по названию. Страница игры грузится один раз. */
     private inner class SwitchLookup(val game: Game, val title: String?) {
         val id: String? by lazy {
             if (title == null) SwitchDb.titleId(game.fileName)?.let { return@lazy it }
-            val idx = runCatching { switchIndex() }.getOrNull() ?: return@lazy SwitchDb.titleId(game.fileName)
+            val idx = runCatching { switchIndex() }.getOrNull()
+                ?: return@lazy SwitchDb.titleId(game.fileName) ?: idByNintendoSearch(title ?: game.title)
             Thumbnails.match(game.fileName, idx.index, title)?.let { idx.idByName[it] } ?: SwitchDb.titleId(game.fileName)
+        }
+
+        /** Игра в европейской базе Nintendo (по Title ID): коробка, квадратная и широкая картинки. */
+        val eu: SwitchDb.EuGame? by lazy {
+            val tid = id ?: return@lazy null
+            nintendo(SwitchDb.euByIdUrl(tid))?.let { SwitchDb.pickEu(SwitchDb.parseEu(String(it)), tid) }
         }
         val page: SwitchDb.Page? by lazy {
             val tid = id ?: return@lazy null
@@ -635,8 +656,15 @@ class MetaRepository(
 
     private fun fetchSwitchCover(sw: SwitchLookup): Triple<String, String?, String?>? {
         val id = sw.id ?: return null
-        // Сначала tinfoil, а если он не ответил или прислал не картинку — запасной источник Nlib
+        // Лучше всего — коробка из европейской базы Nintendo: настоящая обложка, сохраняем как есть
+        sw.eu?.box?.let { url -> getBytes(url)?.let { BitmapFactory.decodeByteArray(it, 0, it.size) } }?.let { box ->
+            val out = saveCover(sw.game, box)
+            box.recycle()
+            return Triple(out, sw.eu?.title?.ifBlank { null } ?: sw.name, null)
+        }
+        // Иначе квадратная картинка: Nintendo, затем tinfoil, затем Nlib
         val icon = listOf(
+            { sw.eu?.square?.let { getBytes(it) } },
             { tinfoil(SwitchDb.iconUrl(id)) },
             { getBytes(SwitchDb.nlibIconUrl(id)) },
         ).firstNotNullOfOrNull { load -> load()?.let { BitmapFactory.decodeByteArray(it, 0, it.size) } } ?: return null.also { DiagLog.add("[SWITCH] ${sw.game.title}: иконка не загрузилась (${lastProblem.get() ?: "нет в базах"})") }
@@ -713,7 +741,8 @@ class MetaRepository(
     }
 
     private fun fetchSwitchSnap(sw: SwitchLookup): String? {
-        val url = sw.page?.shots?.firstOrNull() ?: return null
+        // Снимок экрана из игры (tinfoil или Nlib), а если его нет — широкая картинка из базы Nintendo
+        val url = sw.page?.shots?.firstOrNull() ?: sw.eu?.wide ?: return null
         return getBytes(url)?.let { saveSnap(sw.game, it) }
     }
 
@@ -918,7 +947,7 @@ class MetaRepository(
     }
 
     companion object {
-        const val VERSION = "0.36"
+        const val VERSION = "0.37"
         /** Страница проекта — контакт в подписи запросов (Issues для связи). */
         const val PROJECT_URL = "https://github.com/fenomen64/retro-home"
         const val USER_AGENT = "RetroHome/$VERSION (personal Android game launcher)"

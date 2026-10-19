@@ -441,12 +441,12 @@ fun PhoneHome(
                                 s.addPage to { actions.addPage() },
                             )
                             if (empty && data.pageCount > 1) entries += s.deletePage to { actions.deletePage(page) }
-                            entries += "${s.shape.title}: ${s.shape.name(data.settings.iconShape)}" to {
+                            entries += "${s.ext.shape.title}: ${s.ext.shape.name(data.settings.iconShape)}" to {
                                 state.sheet = Sheet(
-                                    s.shape.title,
+                                    s.ext.shape.title,
                                     com.retrohome.launcher.data.IconShapes.ids.map { id ->
                                         val mark = if (id == data.settings.iconShape) "  •" else ""
-                                        (s.shape.name(id) + mark) to { actions.setIconShape(id) }
+                                        (s.ext.shape.name(id) + mark) to { actions.setIconShape(id) }
                                     },
                                 )
                             }

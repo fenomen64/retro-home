@@ -17,6 +17,9 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.swipeRight
+import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -991,6 +994,10 @@ class ScreensTest {
             })
         }
         compose.onRoot().captureRoboImage("$SHOTS/10_settings.png")
+        // Настройки — по разделам: заходим в «Звук»
+        compose.onNodeWithText(RU.secSound).performClick()
+        compose.waitForIdle()
+        compose.onRoot().captureRoboImage("$SHOTS/10b_settings_sound.png")
         // Стрелки у переключателя: ‹ — назад, › — вперёд; нажатие на строку — вперёд
         compose.onNode(androidx.compose.ui.test.hasScrollAction()).performScrollToNode(androidx.compose.ui.test.hasText(RU.sounds))
         val soft = RU.packName("soft")
@@ -1370,5 +1377,164 @@ class CoverAndScaleUiTest {
         assertEquals(1f, com.retrohome.launcher.ui.UiScale.auto(800), 0.001f)
         assertEquals(0.7f, com.retrohome.launcher.ui.UiScale.auto(300), 0.001f)
         assertEquals(0.9f, com.retrohome.launcher.ui.UiScale.factor(90, 411), 0.001f)
+    }
+}
+
+
+/** Настройки по разделам, возврат на прежнее место, звуки; листание курками; переключение игры пальцем; правый стик. */
+@RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(application = Application::class, sdk = [35])
+class NavigationUiTest {
+    @get:Rule val compose = createComposeRule()
+    private val pads = PadRegistry()
+    private val sfx = RecordingSfx()
+
+    private fun show(stick: androidx.compose.runtime.State<Float> = mutableStateOf(0f), sounds: Boolean = false, content: @Composable () -> Unit) {
+        compose.setContent {
+            CompositionLocalProvider(
+                LocalStrings provides RU,
+                LocalIconLoader provides FakeIcons,
+                com.retrohome.launcher.ui.LocalCoverLoader provides FakeCovers,
+                com.retrohome.launcher.ui.LocalRemoteImages provides FakeBadges,
+                com.retrohome.launcher.audio.LocalSfx provides sfx,
+                LocalPadRegistry provides pads,
+                com.retrohome.launcher.ui.LocalRightStick provides stick,
+                com.retrohome.launcher.ui.LocalScreenSounds provides sounds,
+            ) { content() }
+        }
+    }
+
+    private val noop = object : SettingsActions {
+        override fun toggleLang() {}
+        override fun setMode(mode: ModeOverride) {}
+        override fun toggleSwap() {}
+        override fun toggleAutoAdd() {}
+        override fun sortHome() {}
+        override fun cycleColumns(dir: Int) {}
+        override fun cycleRows(dir: Int) {}
+        override fun openConsoleApps() {}
+        override fun openHiddenApps() {}
+        override fun openDefaultHome() {}
+        override fun pickRoms() {}
+        override fun openFolders() {}
+        override fun openEmulators() {}
+        override fun toggleAutoMeta() {}
+        override fun cycleSfx(dir: Int) {}
+        override fun cycleSfxVolume(dir: Int) {}
+        override fun cycleMusic(dir: Int) {}
+        override fun cycleMusicVolume(dir: Int) {}
+        override fun pickMusic() {}
+    }
+
+    @Test
+    @Config(qualifiers = "w768dp-h432dp-land-xhdpi")
+    fun settingsSectionsRememberWhereYouCameFrom() {
+        val nav = com.retrohome.launcher.ui.SettingsNav()
+        val open = mutableStateOf(true)
+        show(sounds = true) {
+            // Как на приставке: управление кнопками (в сенсорном режиме Android курсор не показывает)
+            val im = androidx.compose.ui.platform.LocalInputModeManager.current
+            androidx.compose.runtime.LaunchedEffect(Unit) { im.requestInputMode(androidx.compose.ui.input.InputMode.Keyboard) }
+            if (open.value) SettingsScreen(Settings(), "0.1", focusFirst = true, onBack = {}, a = noop, nav = nav)
+        }
+        // Главный экран настроек — только разделы
+        compose.onNodeWithText(RU.secGames).assertExists()
+        compose.onAllNodesWithText(RU.emulators).assertCountEquals(0)
+        // Заходим в «Игры», выбираем «Эмуляторы» (вложенный экран)
+        compose.onNodeWithText(RU.secGames).performClick()
+        compose.onNodeWithText(RU.emulators).performClick()
+        compose.runOnIdle { assertEquals("emulators", nav.memory("GAMES").last); assertTrue(sfx.played.contains(Sfx.SELECT)) }
+        // Вложенный экран закрыли — настройки снова на экране, курсор там, откуда заходили
+        compose.runOnIdle { open.value = false }
+        compose.runOnIdle { open.value = true }
+        compose.waitForIdle()
+        compose.onNodeWithText(RU.emulators).assertIsFocused()
+        // Назад из раздела — к списку разделов, курсор на «Игры»
+        compose.onAllNodesWithText("‹")[0].performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText(RU.secGames).assertIsFocused()
+        compose.runOnIdle { assertTrue(sfx.played.contains(Sfx.BACK)) }
+        compose.onRoot().captureRoboImage("$SHOTS/50_settings_menu.png")
+    }
+
+    private fun gcGames(): com.retrohome.launcher.ui.console.GamesInfo {
+        val games = listOf("Skies of Arcadia", "Tales of Symphonia", "Wind Waker").mapIndexed { i, t ->
+            com.retrohome.launcher.data.Game("g$i", "/r/g$i.iso", GS.GC, t, emptyList(), "gc")
+        }
+        val meta = games.associate { it.id to com.retrohome.launcher.data.GameMeta(cover = it.title + ".webp", descRu = "Описание игры. ".repeat(80)) }
+        return com.retrohome.launcher.ui.console.GamesInfo(games, true, meta) { "Dolphin" }
+    }
+
+    @Test
+    @Config(qualifiers = "w768dp-h432dp-land-xhdpi")
+    fun triggersScrollTheCarouselWhenChosen() {
+        val keys = mutableStateOf("triggers")
+        val state = ConsoleState().apply { tabId = "sys:GC" }
+        val tabs = buildConsoleTabs(sampleApps, sampleData, RU, gcGames())
+        show { ConsoleHome(tabs, state, ModeOverride.AUTO, false, RecordingConsoleActions(), carouselKeys = keys.value) }
+        val first = compose.runOnIdle { state.selected(tabs)!!.key }
+        // Только курки: крестовина ряд не листает, R2 — листает
+        compose.runOnIdle { pads.dispatch(Pad.RIGHT) }
+        compose.runOnIdle { assertEquals(first, state.selected(tabs)!!.key) }
+        compose.runOnIdle { pads.dispatch(Pad.R2) }
+        val second = compose.runOnIdle { state.selected(tabs)!!.key }
+        assertTrue(second != first)
+        compose.runOnIdle { pads.dispatch(Pad.L2) }
+        compose.runOnIdle { assertEquals(first, state.selected(tabs)!!.key) }
+        // «Крестовина» (по умолчанию): курки ряд не листают
+        compose.runOnIdle { keys.value = "dpad" }
+        compose.runOnIdle { pads.dispatch(Pad.R2) }
+        compose.runOnIdle { assertEquals(first, state.selected(tabs)!!.key) }
+        compose.runOnIdle { pads.dispatch(Pad.RIGHT) }
+        compose.runOnIdle { assertEquals(second, state.selected(tabs)!!.key) }
+    }
+
+    @Test
+    @Config(qualifiers = "w768dp-h432dp-land-xhdpi")
+    fun rightStickScrollsTheDescription() {
+        val stick = androidx.compose.runtime.mutableFloatStateOf(0f)
+        val state = ConsoleState().apply { tabId = "sys:GC" }
+        val tabs = buildConsoleTabs(sampleApps, sampleData, RU, gcGames())
+        show(stick) { ConsoleHome(tabs, state, ModeOverride.AUTO, false, RecordingConsoleActions()) }
+        compose.runOnIdle { pads.dispatch(Pad.CONFIRM) }
+        compose.mainClock.advanceTimeBy(600)
+        compose.runOnIdle { assertTrue(state.page != null); assertEquals(0, state.pageScroll.value) }
+        // Пока стик наклонён, прокрутка идёт каждый кадр — время двигаем вручную
+        compose.mainClock.autoAdvance = false
+        androidx.compose.runtime.snapshots.Snapshot.withMutableSnapshot { stick.floatValue = 1f }
+        compose.mainClock.advanceTimeBy(400)
+        androidx.compose.runtime.snapshots.Snapshot.withMutableSnapshot { stick.floatValue = 0f }
+        compose.mainClock.advanceTimeBy(100)
+        val down = state.pageScroll.value
+        assertTrue("описание прокрутилось вниз: $down", down > 100)
+        androidx.compose.runtime.snapshots.Snapshot.withMutableSnapshot { stick.floatValue = -1f }
+        compose.mainClock.advanceTimeBy(800)
+        androidx.compose.runtime.snapshots.Snapshot.withMutableSnapshot { stick.floatValue = 0f }
+        compose.mainClock.advanceTimeBy(100)
+        assertTrue(state.pageScroll.value < down)
+        compose.mainClock.autoAdvance = true
+    }
+
+    @Test
+    @Config(qualifiers = "w911dp-h411dp-land-xxhdpi")
+    fun fingerSwitchesGamesOnThePage() {
+        val switched = mutableListOf<Int>()
+        val e = com.retrohome.launcher.ui.console.ConsoleEntry(
+            key = "game:g0", label = "Skies of Arcadia", subtitle = "GC", favorite = false, zone = ConsoleZone.GAME,
+            kind = com.retrohome.launcher.ui.console.EntryKind.GAME, system = GS.GC, cover = "Skies of Arcadia.webp",
+        )
+        show {
+            com.retrohome.launcher.ui.console.GamePage(e, 0, androidx.compose.foundation.rememberScrollState(), "A", "B", true,
+                onButton = {}, onBack = {}, onOptions = {}, onFavorite = {}, onSwitch = { switched += it })
+        }
+        compose.onRoot().captureRoboImage("$SHOTS/51_page_arrows.png")
+        // Стрелки у краёв обложки
+        compose.onNodeWithTag("nextGame", useUnmergedTree = true).performClick()
+        compose.onNodeWithTag("prevGame", useUnmergedTree = true).performClick()
+        // Свайп по странице: влево — следующая игра, вправо — предыдущая
+        compose.onRoot().performTouchInput { swipeLeft() }
+        compose.onRoot().performTouchInput { swipeRight() }
+        compose.runOnIdle { assertEquals(listOf(1, -1, 1, -1), switched) }
     }
 }

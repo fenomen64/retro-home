@@ -248,14 +248,8 @@ data class Strings(
     val ra: RaStrings,
     /** Проверка соединения. */
     val net: NetStrings,
-    /** Эмуляторы с особым запуском (Lemuroid). */
-    val emu: EmuStrings,
-    /** Диагностика загрузки обложек и описаний. */
-    val diag: DiagStrings,
-    /** Форма значков приложений. */
-    val shape: ShapeStrings,
-    /** Масштаб интерфейса. */
-    val scale: ScaleStrings,
+    /** Тексты новых возможностей (отдельно: у JVM предел в 255 параметров конструктора). */
+    val ext: ExtStrings,
 ) {
     val langName: String get() = if (lang == Lang.RU) "Русский" else "English"
 
@@ -540,40 +534,56 @@ val RU = Strings(
     pickMusic = "Выбрать свою мелодию",
     pickMusicDesc = "Любой аудиофайл с устройства, будет играть по кругу",
     musicVolume = "Громкость музыки",
-    scale = ScaleStrings(
-        title = "Масштаб интерфейса",
-        desc = "Размер консольного режима. «Авто» подстраивает его под высоту экрана, чтобы всё помещалось",
-        auto = "Авто · %d%%",
-    ),
-    shape = ShapeStrings(
-        title = "Форма значков",
-        desc = "«Как в системе» — по настройке Android; если в системе форма не меняется, выберите здесь",
-        system = "Как в системе",
-        circle = "Круг",
-        squircle = "Сквиркл",
-        rounded = "Скруглённый квадрат",
-        square = "Квадрат",
-        teardrop = "Капля",
-        none = "Без обрезки",
-    ),
-    diag = DiagStrings(
-        title = "Диагностика обложек и описаний",
-        desc = "Отчёт, почему у игр нет обложек или описаний",
-        intro = "Отчёт о поиске обложек и описаний: какие папки найдены, сколько игр, что нашлось и почему нет. Почта и ключи в него не попадают. Нажмите «Повторить поиск», подождите минуту, затем «Поделиться» — и отправьте отчёт разработчику.",
-        share = "Поделиться отчётом",
-        shareDesc = "Отправить в Telegram, почту и т. д.",
-        copy = "Скопировать отчёт",
-        copied = "Отчёт скопирован",
-        retry = "Повторить поиск",
-        retryDesc = "Заново искать обложки и описания, которые не нашлись",
-        refresh = "Обновить отчёт",
-    ),
-    emu = EmuStrings(
-        lemuroidHint = "Lemuroid не умеет открывать игру по файлу, поэтому открыт его список игр. Чтобы запускать сразу: в Lemuroid удерживайте игру → «Создать ярлык» — Retro Home запомнит её",
-        lemuroidHintNotHome = "Lemuroid не умеет открывать игру по файлу, поэтому открыт его список игр. Прямой запуск работает через ярлыки, а их принимает только главный экран: сделайте Retro Home главным экраном и создайте ярлык игры в Lemuroid",
-        lemuroidLinked = "«%s» теперь запускается в Lemuroid сразу",
-        shortcutUnsupported = "Retro Home принимает только ярлыки игр Lemuroid",
-        vitaNoId = "Не найден номер игры (вида PCSE00120), поэтому открыт список игр эмулятора. Положите рядом заглушку .psvita с номером внутри или добавьте номер в имя файла: «Игра [PCSE00120].vpk»",
+    ext = ExtStrings(
+        menu = MenuStrings(
+            general = "Язык, режим, кнопки A/B, масштаб, главный экран",
+            look = "Тема, цвет выделения, вкладки консолей, вибрация",
+            sound = "Звуки интерфейса и музыка",
+            games = "Папка ROMs, эмуляторы, страница игры, сортировка, время в играх",
+            dataTitle = "Обложки и достижения",
+            data = "Загрузка обложек и описаний, проверка соединения, диагностика, RetroAchievements",
+            phone = "Рабочий стол, значки, сетка, скрытые приложения",
+            carousel = "Листать игры в ряду",
+            carouselDesc = "Чем выбирать игру во вкладке консоли",
+            carouselDpad = "Крестовина ◀ ▶",
+            carouselTriggers = "Курки L2 / R2",
+            carouselBoth = "Крестовина и курки",
+        ),
+        scale = ScaleStrings(
+            title = "Масштаб интерфейса",
+            desc = "Размер консольного режима. «Авто» подстраивает его под высоту экрана, чтобы всё помещалось",
+            auto = "Авто · %d%%",
+        ),
+        shape = ShapeStrings(
+            title = "Форма значков",
+            desc = "«Как в системе» — по настройке Android; если в системе форма не меняется, выберите здесь",
+            system = "Как в системе",
+            circle = "Круг",
+            squircle = "Сквиркл",
+            rounded = "Скруглённый квадрат",
+            square = "Квадрат",
+            teardrop = "Капля",
+            none = "Без обрезки",
+        ),
+        diag = DiagStrings(
+            title = "Диагностика обложек и описаний",
+            desc = "Отчёт, почему у игр нет обложек или описаний",
+            intro = "Отчёт о поиске обложек и описаний: какие папки найдены, сколько игр, что нашлось и почему нет. Почта и ключи в него не попадают. Нажмите «Повторить поиск», подождите минуту, затем «Поделиться» — и отправьте отчёт разработчику.",
+            share = "Поделиться отчётом",
+            shareDesc = "Отправить в Telegram, почту и т. д.",
+            copy = "Скопировать отчёт",
+            copied = "Отчёт скопирован",
+            retry = "Повторить поиск",
+            retryDesc = "Заново искать обложки и описания, которые не нашлись",
+            refresh = "Обновить отчёт",
+        ),
+        emu = EmuStrings(
+            lemuroidHint = "Lemuroid не умеет открывать игру по файлу, поэтому открыт его список игр. Чтобы запускать сразу: в Lemuroid удерживайте игру → «Создать ярлык» — Retro Home запомнит её",
+            lemuroidHintNotHome = "Lemuroid не умеет открывать игру по файлу, поэтому открыт его список игр. Прямой запуск работает через ярлыки, а их принимает только главный экран: сделайте Retro Home главным экраном и создайте ярлык игры в Lemuroid",
+            lemuroidLinked = "«%s» теперь запускается в Lemuroid сразу",
+            shortcutUnsupported = "Retro Home принимает только ярлыки игр Lemuroid",
+            vitaNoId = "Не найден номер игры (вида PCSE00120), поэтому открыт список игр эмулятора. Положите рядом заглушку .psvita с номером внутри или добавьте номер в имя файла: «Игра [PCSE00120].vpk»",
+        ),
     ),
     net = NetStrings(
         title = "Проверка соединения",
@@ -592,6 +602,7 @@ val RU = Strings(
         lRa = "RetroAchievements",
         lCoversMirror = "Обложки — запасной источник (GitHub)",
         lSwitchMirror = "Игры Switch — запасной источник (nlib.cc)",
+        lSwitchEu = "Обложки Switch (база Nintendo Europe)",
         kNoDns = "Не удаётся найти сайт: нет интернета, не работает DNS или сайт заблокирован. Попробуйте другую сеть; в настройках Android проверьте «Частный DNS».",
         kTimeout = "Сайт не отвечает: соединение слишком медленное или блокируется. Попробуйте другую сеть или VPN.",
         kRefused = "Соединение отклонено: сайт недоступен из этой сети. Попробуйте другую сеть или VPN.",
@@ -869,40 +880,56 @@ val EN = Strings(
     pickMusic = "Choose your own track",
     pickMusicDesc = "Any audio file from the device, played on a loop",
     musicVolume = "Music volume",
-    scale = ScaleStrings(
-        title = "Interface scale",
-        desc = "Size of the console mode. \"Auto\" fits it to the screen height so everything fits",
-        auto = "Auto · %d%%",
-    ),
-    shape = ShapeStrings(
-        title = "Icon shape",
-        desc = "\"System\" follows the Android setting; if the system shape doesn't change, pick one here",
-        system = "System",
-        circle = "Circle",
-        squircle = "Squircle",
-        rounded = "Rounded square",
-        square = "Square",
-        teardrop = "Teardrop",
-        none = "Don't crop",
-    ),
-    diag = DiagStrings(
-        title = "Covers and descriptions diagnostics",
-        desc = "A report on why games have no covers or descriptions",
-        intro = "A report on the cover and description lookup: which folders were found, how many games, what was found and why not. Your email and keys are not included. Press \"Retry lookup\", wait a minute, then \"Share\" and send the report to the developer.",
-        share = "Share report",
-        shareDesc = "Send via Telegram, email, etc.",
-        copy = "Copy report",
-        copied = "Report copied",
-        retry = "Retry lookup",
-        retryDesc = "Look again for covers and descriptions that weren't found",
-        refresh = "Refresh report",
-    ),
-    emu = EmuStrings(
-        lemuroidHint = "Lemuroid can't open a game from a file, so its game list was opened. To launch directly: in Lemuroid long-press the game → \"Create shortcut\" and Retro Home will remember it",
-        lemuroidHintNotHome = "Lemuroid can't open a game from a file, so its game list was opened. Direct launch works through shortcuts, and only the home screen receives them: make Retro Home your home screen and create the game's shortcut in Lemuroid",
-        lemuroidLinked = "\"%s\" now launches in Lemuroid directly",
-        shortcutUnsupported = "Retro Home only accepts Lemuroid game shortcuts",
-        vitaNoId = "No game ID (like PCSE00120) was found, so the emulator's game list was opened. Put a .psvita stub with the ID inside next to the game or add the ID to the file name: \"Game [PCSE00120].vpk\"",
+    ext = ExtStrings(
+        menu = MenuStrings(
+            general = "Language, mode, A/B buttons, scale, home screen",
+            look = "Theme, accent color, console tabs, haptics",
+            sound = "Interface sounds and music",
+            games = "ROMs folder, emulators, game page, sorting, playtime",
+            dataTitle = "Covers and achievements",
+            data = "Cover and description loading, connection check, diagnostics, RetroAchievements",
+            phone = "Home screen, icons, grid, hidden apps",
+            carousel = "Scroll games in a row",
+            carouselDesc = "How to pick a game in a console tab",
+            carouselDpad = "D-pad ◀ ▶",
+            carouselTriggers = "L2 / R2 triggers",
+            carouselBoth = "D-pad and triggers",
+        ),
+        scale = ScaleStrings(
+            title = "Interface scale",
+            desc = "Size of the console mode. \"Auto\" fits it to the screen height so everything fits",
+            auto = "Auto · %d%%",
+        ),
+        shape = ShapeStrings(
+            title = "Icon shape",
+            desc = "\"System\" follows the Android setting; if the system shape doesn't change, pick one here",
+            system = "System",
+            circle = "Circle",
+            squircle = "Squircle",
+            rounded = "Rounded square",
+            square = "Square",
+            teardrop = "Teardrop",
+            none = "Don't crop",
+        ),
+        diag = DiagStrings(
+            title = "Covers and descriptions diagnostics",
+            desc = "A report on why games have no covers or descriptions",
+            intro = "A report on the cover and description lookup: which folders were found, how many games, what was found and why not. Your email and keys are not included. Press \"Retry lookup\", wait a minute, then \"Share\" and send the report to the developer.",
+            share = "Share report",
+            shareDesc = "Send via Telegram, email, etc.",
+            copy = "Copy report",
+            copied = "Report copied",
+            retry = "Retry lookup",
+            retryDesc = "Look again for covers and descriptions that weren't found",
+            refresh = "Refresh report",
+        ),
+        emu = EmuStrings(
+            lemuroidHint = "Lemuroid can't open a game from a file, so its game list was opened. To launch directly: in Lemuroid long-press the game → \"Create shortcut\" and Retro Home will remember it",
+            lemuroidHintNotHome = "Lemuroid can't open a game from a file, so its game list was opened. Direct launch works through shortcuts, and only the home screen receives them: make Retro Home your home screen and create the game's shortcut in Lemuroid",
+            lemuroidLinked = "\"%s\" now launches in Lemuroid directly",
+            shortcutUnsupported = "Retro Home only accepts Lemuroid game shortcuts",
+            vitaNoId = "No game ID (like PCSE00120) was found, so the emulator's game list was opened. Put a .psvita stub with the ID inside next to the game or add the ID to the file name: \"Game [PCSE00120].vpk\"",
+        ),
     ),
     net = NetStrings(
         title = "Connection check",
@@ -921,6 +948,7 @@ val EN = Strings(
         lRa = "RetroAchievements",
         lCoversMirror = "Covers — backup source (GitHub)",
         lSwitchMirror = "Switch games — backup source (nlib.cc)",
+        lSwitchEu = "Switch covers (Nintendo Europe catalog)",
         kNoDns = "Can't find the site: no internet, DNS isn't working, or the site is blocked. Try another network and check Android's Private DNS setting.",
         kTimeout = "The site doesn't respond: the connection is too slow or blocked. Try another network or a VPN.",
         kRefused = "Connection refused: the site isn't reachable from this network. Try another network or a VPN.",
@@ -999,6 +1027,33 @@ data class RaStrings(
     val raRemove: String,
 )
 
+/** Тексты новых возможностей: особый запуск эмуляторов, диагностика, форма значков, масштаб, разделы настроек. */
+data class ExtStrings(
+    val emu: EmuStrings,
+    val diag: DiagStrings,
+    val shape: ShapeStrings,
+    val scale: ScaleStrings,
+    val menu: MenuStrings,
+)
+
+/** Разделы настроек: что в каждом. */
+data class MenuStrings(
+    val general: String,
+    val look: String,
+    val sound: String,
+    val games: String,
+    val dataTitle: String,
+    val data: String,
+    val phone: String,
+    val carousel: String,
+    val carouselDesc: String,
+    val carouselDpad: String,
+    val carouselTriggers: String,
+    val carouselBoth: String,
+) {
+    fun carouselName(id: String) = when (id) { "triggers" -> carouselTriggers; "both" -> carouselBoth; else -> carouselDpad }
+}
+
 /** Масштаб интерфейса. */
 data class ScaleStrings(val title: String, val desc: String, val auto: String)
 
@@ -1061,6 +1116,7 @@ data class NetStrings(
     val lRa: String,
     val lCoversMirror: String,
     val lSwitchMirror: String,
+    val lSwitchEu: String,
     val kNoDns: String,
     val kTimeout: String,
     val kRefused: String,
@@ -1074,7 +1130,7 @@ data class NetStrings(
     val problemHint: String,
 ) {
     fun label(id: String) = when (id) {
-        "covers" -> lCovers; "coversMirror" -> lCoversMirror; "wikiEn" -> lWikiEn; "wikiRu" -> lWikiRu; "wikidata" -> lWikidata; "switch" -> lSwitch; "switchMirror" -> lSwitchMirror; else -> lRa
+        "covers" -> lCovers; "coversMirror" -> lCoversMirror; "wikiEn" -> lWikiEn; "wikiRu" -> lWikiRu; "wikidata" -> lWikidata; "switch" -> lSwitch; "switchMirror" -> lSwitchMirror; "switchEu" -> lSwitchEu; else -> lRa
     }
 
     fun explain(kind: com.retrohome.launcher.data.NetworkCheck.Kind) = when (kind) {

@@ -123,7 +123,7 @@ class DiagnosticsTest {
                 DiagnosticsScreen(onBack = {}, report = { "Retro Home test\n\nПапки (0):" }, onShare = { shared = it }, onCopy = {}, onRetry = {})
             }
         }
-        compose.onNodeWithText(RU.diag.share).performClick()
+        compose.onNodeWithText(RU.ext.diag.share).performClick()
         compose.runOnIdle { assertEquals("Retro Home test\n\nПапки (0):", shared) }
         compose.onNodeWithText("Папки (0):").assertExists()
     }

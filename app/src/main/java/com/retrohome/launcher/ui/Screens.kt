@@ -34,6 +34,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -67,7 +68,10 @@ import com.retrohome.launcher.i18n.LocalStrings
 /** Общая рамка экрана: заголовок с кнопкой «назад» и непрозрачный фон. */
 @Composable
 fun ScreenFrame(title: String, onBack: () -> Unit, content: @Composable () -> Unit) {
-    BackHandler(onBack = onBack)
+    val sounds = LocalScreenSounds.current
+    val sfx = com.retrohome.launcher.audio.LocalSfx.current
+    val back: () -> Unit = { if (sounds) sfx.play(com.retrohome.launcher.audio.Sfx.BACK); onBack() }
+    BackHandler(onBack = back)
     Column(
         Modifier
             .fillMaxSize()
@@ -85,7 +89,7 @@ fun ScreenFrame(title: String, onBack: () -> Unit, content: @Composable () -> Un
                 fontSize = 28.sp,
                 modifier = Modifier
                     .clip(RoundedCornerShape(50))
-                    .clickable(onClick = onBack)
+                    .clickable(onClick = back)
                     .padding(horizontal = 14.dp, vertical = 2.dp),
             )
             Text(title, color = Palette.text, fontSize = 20.sp, fontWeight = FontWeight.Bold)
@@ -115,6 +119,7 @@ interface SettingsActions {
     fun cycleMusicVolume(dir: Int = 1)
     fun pickMusic()
     fun cycleSortGames(dir: Int = 1) {}
+    fun cycleCarouselKeys(dir: Int = 1) {}
     fun toggleGamePage() {}
     fun cycleTheme(dir: Int = 1) {}
     fun cycleAccent(dir: Int = 1) {}
@@ -210,6 +215,13 @@ private fun Modifier.tabMoveKeys(onMove: (Int) -> Unit): Modifier = onPreviewKey
     true
 }
 
+/** Разделы настроек. */
+enum class SettingsSection { GENERAL, LOOK, SOUND, GAMES, DATA, PHONE }
+
+/**
+ * Настройки: сначала список разделов, в раздел — нажатием. Назад из раздела — к списку разделов,
+ * курсор на том разделе, откуда вышли; из вложенных экранов — туда, откуда в них зашли.
+ */
 @Composable
 fun SettingsScreen(
     settings: Settings,
@@ -221,52 +233,94 @@ fun SettingsScreen(
     usageAccess: Boolean = false,
     /** Название выбранного набора значков (null — обычные значки). */
     iconPackName: String? = null,
+    nav: SettingsNav = remember { SettingsNav() },
 ) {
     val s = LocalStrings.current
-    val first = remember { FocusRequester() }
-    LaunchedEffect(focusFirst) { if (focusFirst) runCatching { first.requestFocus() } }
-    val appMode = LocalAppMode.current
-    ScreenFrame(s.settingsTitle, onBack) {
-        LazyColumn(Modifier.fillMaxSize()) {
-            item { SectionHeader(s.secGeneral) }
-            item {
-                ChoiceRow(s.language, s.langName, Modifier.focusRequester(first)) { a.toggleLang() }
+    val section = nav.section?.let { runCatching { SettingsSection.valueOf(it) }.getOrNull() }
+    val title = when (section) {
+        null -> s.settingsTitle
+        SettingsSection.GENERAL -> s.secGeneral
+        SettingsSection.LOOK -> s.secLook
+        SettingsSection.SOUND -> s.secSound
+        SettingsSection.GAMES -> s.secGames
+        SettingsSection.DATA -> s.ext.menu.dataTitle
+        SettingsSection.PHONE -> s.secPhone
+    }
+    val mem = nav.memory(section?.name)
+    // Первый раз на этом экране — курсор на первую строку; дальше — память
+    if (focusFirst && mem.last == null) mem.last = if (section == null) "sec:" + SettingsSection.GENERAL.name else "first"
+    ScreenFrame(title, onBack = { if (section != null) nav.section = null else onBack() }) {
+        CompositionLocalProvider(LocalFocusMemory provides mem) {
+            LazyColumn(Modifier.fillMaxSize(), state = mem.list) {
+                if (section == null) settingsMenu(s, nav, version)
+                else settingsSection(section, s, settings, a, romsLabel, usageAccess, iconPackName)
             }
+        }
+    }
+}
+
+private fun androidx.compose.foundation.lazy.LazyListScope.settingsMenu(
+    s: com.retrohome.launcher.i18n.Strings, nav: SettingsNav, version: String,
+) {
+    val entries = listOf(
+        SettingsSection.GENERAL to (s.secGeneral to s.ext.menu.general),
+        SettingsSection.LOOK to (s.secLook to s.ext.menu.look),
+        SettingsSection.SOUND to (s.secSound to s.ext.menu.sound),
+        SettingsSection.GAMES to (s.secGames to s.ext.menu.games),
+        SettingsSection.DATA to (s.ext.menu.dataTitle to s.ext.menu.data),
+        SettingsSection.PHONE to (s.secPhone to s.ext.menu.phone),
+    )
+    for ((sec, text) in entries) item(key = sec.name) {
+        FocusRow(onClick = { nav.section = sec.name }, id = "sec:" + sec.name) {
+            TitleAndDesc(text.first, text.second, "›")
+        }
+    }
+    item {
+        Text(
+            "Retro Home · ${s.version} $version",
+            color = Palette.dim,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(24.dp),
+        )
+    }
+}
+
+private fun androidx.compose.foundation.lazy.LazyListScope.settingsSection(
+    section: SettingsSection,
+    s: com.retrohome.launcher.i18n.Strings,
+    settings: Settings,
+    a: SettingsActions,
+    romsLabel: String?,
+    usageAccess: Boolean,
+    iconPackName: String?,
+) {
+    when (section) {
+        SettingsSection.GENERAL -> {
+            item { ChoiceRow(s.language, s.langName, id = "first") { a.toggleLang() } }
             // В режиме приложения экран всегда консольный — выбирать нечего
-            if (!appMode) item {
-                ModeRow(settings.mode, a::setMode)
-            }
-            item {
-                ChoiceRow(s.swapAB, if (settings.swapAB) s.on else s.off, desc = s.swapABDesc) { a.toggleSwap() }
-            }
+            item { if (!LocalAppMode.current) ModeRow(settings.mode, a::setMode) }
+            item { ChoiceRow(s.swapAB, if (settings.swapAB) s.on else s.off, desc = s.swapABDesc, id = "swap") { a.toggleSwap() } }
             item {
                 val cfg = androidx.compose.ui.platform.LocalConfiguration.current
                 val auto = (UiScale.auto(minOf(cfg.screenWidthDp, cfg.screenHeightDp)) * 100).toInt()
-                val value = if (settings.uiScale <= 0) s.scale.auto.format(auto) else "${settings.uiScale}%"
-                ChoiceRow(s.scale.title, value, desc = s.scale.desc) { a.cycleUiScale(it) }
+                val value = if (settings.uiScale <= 0) s.ext.scale.auto.format(auto) else "${settings.uiScale}%"
+                ChoiceRow(s.ext.scale.title, value, desc = s.ext.scale.desc, id = "scale") { a.cycleUiScale(it) }
             }
-            item {
-                FocusRow(onClick = a::openDefaultHome) { TitleAndDesc(s.setDefault, s.setDefaultDesc) }
-            }
-
-            item { SectionHeader(s.secLook) }
-            item {
-                ChoiceRow(s.theme, s.themeName(settings.theme)) { a.cycleTheme(it) }
-            }
+            item { FocusRow(onClick = a::openDefaultHome, id = "home") { TitleAndDesc(s.setDefault, s.setDefaultDesc) } }
+        }
+        SettingsSection.LOOK -> {
+            item { ChoiceRow(s.theme, s.themeName(settings.theme), id = "first") { a.cycleTheme(it) } }
             item {
                 ChoiceRow(
                     s.accent, s.accentName(settings.accent),
                     leading = {
                         Box(Modifier.padding(end = 12.dp).size(18.dp).clip(RoundedCornerShape(50)).background(Palette.accent))
                     },
+                    id = "accent",
                 ) { a.cycleAccent(it) }
             }
-            item {
-                ChoiceRow(s.tabColors, if (settings.tabColors) s.on else s.off, desc = s.tabColorsDesc) { a.toggleTabColors() }
-            }
-            item {
-                FocusRow(onClick = a::openConsoleTabs) { TitleAndDesc(s.consoleTabs, s.consoleTabsDesc) }
-            }
+            item { ChoiceRow(s.tabColors, if (settings.tabColors) s.on else s.off, desc = s.tabColorsDesc, id = "tabColors") { a.toggleTabColors() } }
+            item { FocusRow(onClick = a::openConsoleTabs, id = "tabs") { TitleAndDesc(s.consoleTabs, s.consoleTabsDesc) } }
             item {
                 val target = com.retrohome.launcher.audio.LocalHapticTarget.current
                 val motor = remember(settings.haptics) { target() }
@@ -275,108 +329,63 @@ fun SettingsScreen(
                     com.retrohome.launcher.audio.HapticTarget.SYSTEM -> s.motorSystem
                     com.retrohome.launcher.audio.HapticTarget.NONE -> s.motorNone
                 }
-                ChoiceRow(s.haptics, s.hapticsName(settings.haptics), desc = s.hapticsDesc + "\n" + where) { a.cycleHaptics(it) }
+                ChoiceRow(s.haptics, s.hapticsName(settings.haptics), desc = s.hapticsDesc + "\n" + where, id = "haptics") { a.cycleHaptics(it) }
             }
-
-            item { SectionHeader(s.secSound) }
+        }
+        SettingsSection.SOUND -> {
+            item { ChoiceRow(s.sounds, s.packName(settings.sfxPack), desc = s.soundsDesc, id = "first") { a.cycleSfx(it) } }
+            item { ChoiceRow(s.sfxVolume, "${settings.sfxVolume}%", id = "sfxVolume") { a.cycleSfxVolume(it) } }
+            item { ChoiceRow(s.music, s.trackName(settings.music), desc = s.musicDesc, id = "music") { a.cycleMusic(it) } }
+            item { ChoiceRow(s.musicVolume, "${settings.musicVolume}%", id = "musicVolume") { a.cycleMusicVolume(it) } }
+            item { FocusRow(onClick = a::pickMusic, id = "pickMusic") { TitleAndDesc(s.pickMusic, s.pickMusicDesc) } }
+        }
+        SettingsSection.GAMES -> {
+            item { FocusRow(onClick = a::pickRoms, id = "first") { TitleAndDesc(s.romsFolder, s.pickRomsDesc, romsLabel ?: s.notSelected) } }
+            item { FocusRow(onClick = a::openFolders, id = "folders") { TitleAndDesc(s.folders, s.foldersDesc) } }
+            item { FocusRow(onClick = a::openEmulators, id = "emulators") { TitleAndDesc(s.emulators, s.emulatorsDesc) } }
+            item { ChoiceRow(s.gamePage, if (settings.gamePage) s.on else s.off, desc = s.gamePageDesc, id = "gamePage") { a.toggleGamePage() } }
+            item { ChoiceRow(s.sortGames, s.sortName(settings.sortGames), desc = s.sortGamesDesc, id = "sort") { a.cycleSortGames(it) } }
             item {
-                ChoiceRow(s.sounds, s.packName(settings.sfxPack), desc = s.soundsDesc) { a.cycleSfx(it) }
+                ChoiceRow(s.ext.menu.carousel, s.ext.menu.carouselName(settings.carouselKeys), desc = s.ext.menu.carouselDesc, id = "carousel") { a.cycleCarouselKeys(it) }
             }
+            item { FocusRow(onClick = a::openConsoleApps, id = "consoleApps") { TitleAndDesc(s.consoleApps, s.consoleAppsDesc) } }
             item {
-                ChoiceRow(s.sfxVolume, "${settings.sfxVolume}%") { a.cycleSfxVolume(it) }
-            }
-            item {
-                ChoiceRow(s.music, s.trackName(settings.music), desc = s.musicDesc) { a.cycleMusic(it) }
-            }
-            item {
-                ChoiceRow(s.musicVolume, "${settings.musicVolume}%") { a.cycleMusicVolume(it) }
-            }
-            item {
-                FocusRow(onClick = a::pickMusic) { TitleAndDesc(s.pickMusic, s.pickMusicDesc) }
-            }
-
-            item { SectionHeader(s.secGames) }
-            item {
-                FocusRow(onClick = a::pickRoms) { TitleAndDesc(s.romsFolder, s.pickRomsDesc, romsLabel ?: s.notSelected) }
-            }
-            item {
-                FocusRow(onClick = a::openFolders) { TitleAndDesc(s.folders, s.foldersDesc) }
-            }
-            item {
-                FocusRow(onClick = a::openEmulators) { TitleAndDesc(s.emulators, s.emulatorsDesc) }
-            }
-            item {
-                ChoiceRow(s.gamePage, if (settings.gamePage) s.on else s.off, desc = s.gamePageDesc) { a.toggleGamePage() }
-            }
-            item {
-                ChoiceRow(s.sortGames, s.sortName(settings.sortGames), desc = s.sortGamesDesc) { a.cycleSortGames(it) }
-            }
-            item {
-                FocusRow(onClick = a::editContact) {
-                    TitleAndDesc(s.contactEmail, s.contactEmailDesc, settings.contactEmail ?: s.notSet)
-                }
-            }
-            item {
-                FocusRow(onClick = a::openNetworkCheck) { TitleAndDesc(s.net.title, s.net.desc) }
-            }
-            item {
-                FocusRow(onClick = a::openDiagnostics) { TitleAndDesc(s.diag.title, s.diag.desc) }
-            }
-            item {
-                FocusRow(onClick = a::editRaAccount) {
-                    TitleAndDesc(s.ra.raAccount, s.ra.raAccountDesc, settings.raUser?.takeIf { settings.raKey != null } ?: s.notSet)
-                }
-            }
-            item {
-                FocusRow(onClick = a::openUsageAccess) {
+                FocusRow(onClick = a::openUsageAccess, id = "usage") {
                     TitleAndDesc(s.usageAccess, s.usageAccessDesc, if (usageAccess) s.usageOn else s.usageOff)
                 }
             }
+        }
+        SettingsSection.DATA -> {
+            item { ChoiceRow(s.autoMeta, if (settings.autoMeta) s.on else s.off, desc = s.autoMetaDesc, id = "first") { a.toggleAutoMeta() } }
             item {
-                ChoiceRow(s.autoMeta, if (settings.autoMeta) s.on else s.off, desc = s.autoMetaDesc) { a.toggleAutoMeta() }
+                FocusRow(onClick = a::editContact, id = "contact") {
+                    TitleAndDesc(s.contactEmail, s.contactEmailDesc, settings.contactEmail ?: s.notSet)
+                }
             }
+            item { FocusRow(onClick = a::openNetworkCheck, id = "net") { TitleAndDesc(s.net.title, s.net.desc) } }
+            item { FocusRow(onClick = a::openDiagnostics, id = "diag") { TitleAndDesc(s.ext.diag.title, s.ext.diag.desc) } }
             item {
-                FocusRow(onClick = a::openConsoleApps) { TitleAndDesc(s.consoleApps, s.consoleAppsDesc) }
+                FocusRow(onClick = a::editRaAccount, id = "ra") {
+                    TitleAndDesc(s.ra.raAccount, s.ra.raAccountDesc, settings.raUser?.takeIf { settings.raKey != null } ?: s.notSet)
+                }
             }
-
-            item { SectionHeader(s.secPhone) }
-            item {
-                ChoiceRow(s.gestures, if (settings.gestures) s.on else s.off, desc = s.gesturesDesc) { a.toggleGestures() }
-            }
-            item {
-                ChoiceRow(s.iconPack, iconPackName ?: s.iconPackSystem, desc = s.iconPackDesc) { a.cycleIconPack(it) }
-            }
-            item {
-                ChoiceRow(s.shape.title, s.shape.name(settings.iconShape), desc = s.shape.desc) { a.cycleIconShape(it) }
-            }
-            item {
-                ChoiceRow(s.autoAdd, if (settings.autoAddNew) s.on else s.off, desc = s.autoAddDesc) { a.toggleAutoAdd() }
-            }
+        }
+        SettingsSection.PHONE -> {
+            item { ChoiceRow(s.gestures, if (settings.gestures) s.on else s.off, desc = s.gesturesDesc, id = "first") { a.toggleGestures() } }
+            item { ChoiceRow(s.iconPack, iconPackName ?: s.iconPackSystem, desc = s.iconPackDesc, id = "iconPack") { a.cycleIconPack(it) } }
+            item { ChoiceRow(s.ext.shape.title, s.ext.shape.name(settings.iconShape), desc = s.ext.shape.desc, id = "shape") { a.cycleIconShape(it) } }
+            item { ChoiceRow(s.autoAdd, if (settings.autoAddNew) s.on else s.off, desc = s.autoAddDesc, id = "autoAdd") { a.toggleAutoAdd() } }
             item {
                 var armed by remember { mutableStateOf(false) }
                 FocusRow(onClick = {
                     if (armed) { a.sortHome(); armed = false } else armed = true
-                }) {
+                }, id = "sortAbc") {
                     TitleAndDesc(s.sortAbc, s.sortAbcDesc, if (armed) s.tapAgain else null)
                 }
             }
-            item {
-                ChoiceRow("${s.grid}: ${s.columns}", settings.columns.toString()) { a.cycleColumns(it) }
-            }
-            item {
-                ChoiceRow("${s.grid}: ${s.rows}", settings.rows.toString()) { a.cycleRows(it) }
-            }
-            item {
-                FocusRow(onClick = a::openHiddenApps) { TitleAndDesc(s.hiddenApps, s.hiddenAppsDesc) }
-            }
-            item {
-                Text(
-                    "Retro Home · ${s.version} $version",
-                    color = Palette.dim,
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(24.dp),
-                )
-            }
+            item { ChoiceRow("${s.grid}: ${s.columns}", settings.columns.toString(), id = "cols") { a.cycleColumns(it) } }
+            item { ChoiceRow("${s.grid}: ${s.rows}", settings.rows.toString(), id = "rows") { a.cycleRows(it) } }
+            item { FocusRow(onClick = a::openHiddenApps, id = "hidden") { TitleAndDesc(s.hiddenApps, s.hiddenAppsDesc) } }
         }
     }
 }
@@ -980,12 +989,12 @@ fun DiagnosticsScreen(
     val blocks = remember(text) {
         text.trimEnd().split("\n\n").flatMap { b -> b.lines().chunked(12).map { it.joinToString("\n") } }
     }
-    ScreenFrame(s.diag.title, onBack) {
+    ScreenFrame(s.ext.diag.title, onBack) {
         LazyColumn(Modifier.fillMaxSize()) {
-            item { Text(s.diag.intro, color = Palette.dim, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
-            item { FocusRow(onClick = { onShare(text) }) { TitleAndDesc(s.diag.share, s.diag.shareDesc) } }
-            item { FocusRow(onClick = { onCopy(text); copied = true }) { TitleAndDesc(s.diag.copy, if (copied) s.diag.copied else null) } }
-            item { FocusRow(onClick = { onRetry(); round++ }) { TitleAndDesc(s.diag.retry, s.diag.retryDesc) } }
+            item { Text(s.ext.diag.intro, color = Palette.dim, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
+            item { FocusRow(onClick = { onShare(text) }) { TitleAndDesc(s.ext.diag.share, s.ext.diag.shareDesc) } }
+            item { FocusRow(onClick = { onCopy(text); copied = true }) { TitleAndDesc(s.ext.diag.copy, if (copied) s.ext.diag.copied else null) } }
+            item { FocusRow(onClick = { onRetry(); round++ }) { TitleAndDesc(s.ext.diag.retry, s.ext.diag.retryDesc) } }
             items(blocks.size) { i ->
                 FocusRow(onClick = {}) {
                     Text(

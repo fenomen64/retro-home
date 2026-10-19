@@ -22,9 +22,9 @@ class PinShortcutActivity : Activity() {
         val accepted = req != null && id != null && label.isNotBlank() && runCatching { req.isValid && req.accept() }.getOrDefault(false)
         if (accepted) {
             Lemuroid.remember(this, label, id!!)
-            Toast.makeText(this, s.emu.lemuroidLinked.format(label), Toast.LENGTH_LONG).show()
+            Toast.makeText(this, s.ext.emu.lemuroidLinked.format(label), Toast.LENGTH_LONG).show()
         } else {
-            Toast.makeText(this, s.emu.shortcutUnsupported, Toast.LENGTH_LONG).show()
+            Toast.makeText(this, s.ext.emu.shortcutUnsupported, Toast.LENGTH_LONG).show()
         }
         finish()
     }

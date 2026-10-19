@@ -128,7 +128,7 @@ fun systemColor(s: com.retrohome.launcher.data.GameSystem): Color = when (s) {
 }
 
 /** Кнопки геймпада в терминах интерфейса (A/B уже с учётом настройки «поменять местами»). */
-enum class Pad { UP, DOWN, LEFT, RIGHT, CONFIRM, CANCEL, X, Y, START, SELECT, L1, R1 }
+enum class Pad { UP, DOWN, LEFT, RIGHT, CONFIRM, CANCEL, X, Y, START, SELECT, L1, R1, L2, R2 }
 
 /** Куда отдавать нажатия кнопок. Последний зарегистрированный обработчик главный. */
 class PadRegistry {
@@ -139,6 +139,12 @@ class PadRegistry {
 }
 
 val LocalPadRegistry = staticCompositionLocalOf { PadRegistry() }
+
+/**
+ * Наклон правого стика по вертикали: −1 (вверх) … 1 (вниз), 0 — в покое.
+ * Им листают описание игры, полное описание и список достижений.
+ */
+val LocalRightStick = staticCompositionLocalOf<androidx.compose.runtime.State<Float>> { androidx.compose.runtime.mutableFloatStateOf(0f) }
 
 /** Загрузка иконок; в тестах подменяется. */
 interface IconLoader {
@@ -214,11 +220,20 @@ fun AppIcon(key: String, size: Dp, modifier: Modifier = Modifier) {
 fun FocusRow(
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
+    /** id для памяти курсора: вернёшься на экран — курсор встанет сюда же. */
+    id: String? = null,
     content: @Composable () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
+    // Звуки, как в консольном режиме: перемещение и выбор (курсор, поставленный при открытии, — без звука)
+    val sounds = LocalScreenSounds.current
+    val sfx = com.retrohome.launcher.audio.LocalSfx.current
+    val shownAt = remember { uptimeMs() }
+    val memory = LocalFocusMemory.current
     Box(
         modifier
+            .then(if (id != null) Modifier.rememberFocus(id) else Modifier)
+            .onFocusChanged { if (sounds && it.isFocused && !focused && uptimeMs() - shownAt > 300) sfx.play(com.retrohome.launcher.audio.Sfx.MOVE) }
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 3.dp)
             .clip(RoundedCornerShape(14.dp))
@@ -228,7 +243,12 @@ fun FocusRow(
                 RoundedCornerShape(14.dp),
             )
             .onFocusChanged { focused = it.isFocused }
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
+                if (sounds) sfx.play(com.retrohome.launcher.audio.Sfx.SELECT)
+                // Нажатие пальцем фокус не переносит — запоминаем строку сами, чтобы вернуться к ней
+                if (id != null && memory != null) memory.last = id
+                onClick()
+            }
             .padding(horizontal = 16.dp, vertical = 12.dp),
         contentAlignment = Alignment.CenterStart,
     ) { content() }
@@ -256,16 +276,20 @@ fun ChoiceRow(
     modifier: Modifier = Modifier,
     desc: String? = null,
     leading: (@Composable () -> Unit)? = null,
+    id: String? = null,
     onStep: (Int) -> Unit,
 ) {
-    FocusRow(modifier.dpadSteps(onStep), onClick = { onStep(1) }) {
+    val sounds = LocalScreenSounds.current
+    val sfx = com.retrohome.launcher.audio.LocalSfx.current
+    val step: (Int) -> Unit = { dir -> if (sounds) sfx.play(com.retrohome.launcher.audio.Sfx.MOVE); onStep(dir) }
+    FocusRow(modifier.dpadSteps(step), onClick = { onStep(1) }, id = id) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             leading?.invoke()
             Column(Modifier.weight(1f)) {
                 Text(title, color = Palette.text, fontSize = 16.sp)
                 if (desc != null) Text(desc, color = Palette.dim, fontSize = 13.sp)
             }
-            ChoiceValue(value, onStep)
+            ChoiceValue(value, step)
         }
     }
 }

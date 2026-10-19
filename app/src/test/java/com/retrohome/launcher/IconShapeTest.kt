@@ -82,8 +82,8 @@ class IconShapeTest {
         assertNull(IconShapes.maskFor("none"))
         // «Как в системе» всегда даёт какую-то маску (если система не сказала — сквиркл)
         assertNotNull(IconShapes.maskFor("system"))
-        assertEquals("Как в системе", RU.shape.name("system"))
-        assertEquals("Капля", RU.shape.name("teardrop"))
+        assertEquals("Как в системе", RU.ext.shape.name("system"))
+        assertEquals("Капля", RU.ext.shape.name("teardrop"))
     }
 
     @Test fun changingShapeClearsCachedIcons() {

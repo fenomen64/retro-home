@@ -694,6 +694,36 @@ object SwitchDb {
     fun iconUrl(id: String) = "https://tinfoil.media/ti/$id/512/512/"
     fun pageUrl(id: String) = "https://tinfoil.media/Title/$id"
 
+    // --- Европейская база Nintendo (поиск каталога nintendo.com/eu) — по Title ID ---
+    // Точный поиск по номеру игры, есть и самые новые игры; картинки: коробка, квадрат, широкая
+
+    private const val EU = "https://searching.nintendo-europe.com/en/select"
+    private const val EU_FIELDS = "title,application_id_s,image_url,image_url_sq_s,image_url_h16x9_s,system_names_txt"
+
+    fun euByIdUrl(id: String) = "$EU?q=*&fq=application_id_s:${id.lowercase()}&rows=5&wt=json&fl=$EU_FIELDS"
+    fun euByNameUrl(name: String) =
+        "$EU?q=${java.net.URLEncoder.encode(name, "UTF-8")}&fq=type:GAME&rows=8&wt=json&fl=$EU_FIELDS"
+
+    data class EuGame(val id: String, val title: String, val box: String?, val square: String?, val wide: String?, val systems: List<String>)
+
+    fun parseEu(json: String): List<EuGame> = runCatching {
+        val docs = Json.parseToJsonElement(json).jsonObject["response"]?.jsonObject?.get("docs")?.jsonArray.orEmpty()
+        docs.mapNotNull { d ->
+            val o = d.jsonObject
+            fun str(k: String) = (o[k] as? JsonPrimitive)?.contentOrNullSafe()?.takeIf { it.isNotBlank() }
+            val id = str("application_id_s")?.uppercase() ?: return@mapNotNull null
+            val systems = (o["system_names_txt"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNullSafe() }.orEmpty()
+            EuGame(id, clean(str("title") ?: ""), str("image_url"), str("image_url_sq_s"), str("image_url_h16x9_s"), systems)
+        }
+    }.getOrDefault(emptyList())
+
+    /** Из найденных — версия для Switch (не для Switch 2), с картинкой. */
+    fun pickEu(games: List<EuGame>, id: String? = null): EuGame? {
+        val pool = games.filter { id == null || it.id.equals(id, ignoreCase = true) }
+        return pool.firstOrNull { "Nintendo Switch" in it.systems && (it.box != null || it.square != null) }
+            ?: pool.firstOrNull { it.box != null || it.square != null }
+    }
+
     // --- Запасной источник: Nlib API (api.nlib.cc, база TitleDB) — по Title ID ---
     // (tinfoil.media у части провайдеров не открывается)
     const val NLIB = "https://api.nlib.cc/nx"

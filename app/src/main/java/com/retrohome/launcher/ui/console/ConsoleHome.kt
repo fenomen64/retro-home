@@ -54,6 +54,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
@@ -269,6 +271,8 @@ fun ConsoleHome(
     /** A на игре открывает её страницу (false — сразу запуск). */
     gamePage: Boolean = true,
     gameSort: String = "name",
+    /** Чем листать игры в ряду: dpad, triggers (L2/R2) или both. */
+    carouselKeys: String = "dpad",
     /** Вкладки консолей окрашиваются в цвет консоли. */
     tabColors: Boolean = true,
     /** Достижения RetroAchievements (полные списки для панели). */
@@ -277,6 +281,7 @@ fun ConsoleHome(
     val s = LocalStrings.current
     val gamePageNow by rememberUpdatedState(gamePage)
     val gameSortNow by rememberUpdatedState(gameSort)
+    val carouselKeysNow by rememberUpdatedState(carouselKeys)
     val sfx = LocalSfx.current
     val audioNow by rememberUpdatedState(audio)
     state.tabIds = tabs.map { it.id }
@@ -374,8 +379,8 @@ fun ConsoleHome(
                     Pad.CANCEL -> { state.page = null; sfx.play(Sfx.BACK) }
                     Pad.X -> { state.menuIndex = 0; state.overlay = ConsoleOverlay.Item(pageEntry); sfx.play(Sfx.MENU) }
                     Pad.Y -> { actions.toggleFavorite(pageEntry.key); sfx.play(Sfx.FAVORITE) }
-                    Pad.L1 -> switchGame(-1)
-                    Pad.R1 -> switchGame(1)
+                    Pad.L1, Pad.L2 -> switchGame(-1)
+                    Pad.R1, Pad.R2 -> switchGame(1)
                     Pad.START -> { state.menuIndex = 0; state.overlay = ConsoleOverlay.Start; sfx.play(Sfx.MENU) }
                     Pad.SELECT -> { sfx.play(Sfx.SELECT); actions.openSearch() }
                 }
@@ -441,9 +446,14 @@ fun ConsoleHome(
                     }
                     return@padHandler true
                 }
+                // Листание ряда: крестовиной, курками L2/R2 или и тем и другим — как выбрано в настройках
+                val dpad = carouselKeysNow != "triggers"
+                val triggers = carouselKeysNow != "dpad"
                 when (pad) {
-                    Pad.LEFT -> if (item > 0) { state.select(row, item - 1); sfx.play(Sfx.MOVE) }
-                    Pad.RIGHT -> if (item < entries.size - 1) { state.select(row, item + 1); sfx.play(Sfx.MOVE) }
+                    Pad.LEFT -> if (dpad && item > 0) { state.select(row, item - 1); sfx.play(Sfx.MOVE) }
+                    Pad.RIGHT -> if (dpad && item < entries.size - 1) { state.select(row, item + 1); sfx.play(Sfx.MOVE) }
+                    Pad.L2 -> if (triggers && item > 0) { state.select(row, item - 1); sfx.play(Sfx.MOVE) }
+                    Pad.R2 -> if (triggers && item < entries.size - 1) { state.select(row, item + 1); sfx.play(Sfx.MOVE) }
                     Pad.UP -> if (row > 0) { state.rowSel[state.tabId] = row - 1; sfx.play(Sfx.MOVE) }
                     Pad.DOWN -> if (row < rows.size - 1) { state.rowSel[state.tabId] = row + 1; sfx.play(Sfx.MOVE) }
                     Pad.L1 -> { state.tab = (state.tab - 1 + t.size) % t.size; sfx.play(Sfx.TAB) }
@@ -456,6 +466,25 @@ fun ConsoleHome(
                     Pad.CANCEL -> if (state.tab != 0) { state.tab = 0; sfx.play(Sfx.BACK) } else if (appMode) { sfx.play(Sfx.BACK); exitApp() }
                 }
                 true
+            }
+        }
+    }
+
+    // Правый стик листает описание на странице игры, полное описание и список достижений —
+    // плавно, пока стик наклонён; чем сильнее наклон, тем быстрее
+    val stick = com.retrohome.launcher.ui.LocalRightStick.current
+    val stickSpeed = with(LocalDensity.current) { 16.dp.toPx() }
+    LaunchedEffect(stick, active) {
+        if (!active) return@LaunchedEffect
+        androidx.compose.runtime.snapshotFlow { stick.value != 0f }.collectLatest { moving ->
+            while (moving) {
+                androidx.compose.runtime.withFrameNanos { }
+                val d = stick.value * stickSpeed
+                when {
+                    state.overlay is ConsoleOverlay.Description -> state.descScroll.dispatchRawDelta(d)
+                    state.overlay is ConsoleOverlay.Achievements -> state.achList.dispatchRawDelta(d)
+                    state.overlay == null && state.page != null -> state.pageScroll.dispatchRawDelta(d)
+                }
             }
         }
     }

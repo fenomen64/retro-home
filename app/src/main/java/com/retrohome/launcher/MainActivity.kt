@@ -292,6 +292,7 @@ open class MainActivity : ComponentActivity() {
                 CompositionLocalProvider(
                     LocalStrings provides stringsFor(data.settings.lang),
                     LocalPadRegistry provides pads,
+                    com.retrohome.launcher.ui.LocalRightStick provides rightStick,
                     LocalIconLoader provides icons,
                     LocalCoverLoader provides covers,
                     LocalSfx provides feedback,
@@ -332,6 +333,20 @@ open class MainActivity : ComponentActivity() {
         }
     }
 
+    /** Правый стик по вертикали (см. LocalRightStick). */
+    private val rightStick = androidx.compose.runtime.mutableFloatStateOf(0f)
+
+    override fun dispatchGenericMotionEvent(ev: android.view.MotionEvent): Boolean {
+        if (ev.isFromSource(android.view.InputDevice.SOURCE_JOYSTICK) && ev.action == android.view.MotionEvent.ACTION_MOVE) {
+            // У большинства геймпадов (и Retroid) правый стик — оси Z/RZ, у части — RX/RY
+            val rz = ev.getAxisValue(android.view.MotionEvent.AXIS_RZ)
+            val ry = ev.getAxisValue(android.view.MotionEvent.AXIS_RY)
+            val v = if (kotlin.math.abs(rz) >= kotlin.math.abs(ry)) rz else ry
+            rightStick.floatValue = if (kotlin.math.abs(v) < 0.2f) 0f else v
+        }
+        return super.dispatchGenericMotionEvent(ev)
+    }
+
     private fun mapKey(code: Int, swap: Boolean): Pad? = when (code) {
         KeyEvent.KEYCODE_DPAD_UP -> Pad.UP
         KeyEvent.KEYCODE_DPAD_DOWN -> Pad.DOWN
@@ -346,6 +361,8 @@ open class MainActivity : ComponentActivity() {
         KeyEvent.KEYCODE_BUTTON_SELECT -> Pad.SELECT
         KeyEvent.KEYCODE_BUTTON_L1 -> Pad.L1
         KeyEvent.KEYCODE_BUTTON_R1 -> Pad.R1
+        KeyEvent.KEYCODE_BUTTON_L2 -> Pad.L2
+        KeyEvent.KEYCODE_BUTTON_R2 -> Pad.R2
         else -> null
     }
 
