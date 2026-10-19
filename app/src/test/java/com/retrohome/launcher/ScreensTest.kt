@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -1236,6 +1237,44 @@ class AppModeUiTest {
         compose.runOnIdle { appMode.value = false }
         compose.runOnIdle { pads.dispatch(Pad.CANCEL) }
         compose.runOnIdle { assertEquals(1, exits) }
+    }
+
+    /** Пункты меню START на экране и нажатия должны совпадать (раньше «Настройки» открывали Wi-Fi). */
+    @Test
+    @Config(qualifiers = "w768dp-h432dp-land-xhdpi")
+    fun startMenuItemsOpenWhatTheySayInAppMode() {
+        val state = ConsoleState()
+        val actions = RecordingConsoleActions()
+        compose.setContent {
+            CompositionLocalProvider(
+                LocalStrings provides RU,
+                LocalIconLoader provides FakeIcons,
+                com.retrohome.launcher.ui.LocalCoverLoader provides FakeCovers,
+                com.retrohome.launcher.ui.LocalRemoteImages provides FakeBadges,
+                com.retrohome.launcher.audio.LocalSfx provides RecordingSfx(),
+                LocalPadRegistry provides pads,
+                com.retrohome.launcher.ui.LocalAppMode provides true,
+            ) {
+                ConsoleHome(buildConsoleTabs(sampleApps, sampleData, RU, com.retrohome.launcher.ui.console.GamesInfo(hasFolder = true)), state, ModeOverride.AUTO, false, actions)
+            }
+        }
+        compose.runOnIdle { pads.dispatch(Pad.START) }
+        compose.mainClock.advanceTimeBy(600)
+        compose.waitForIdle()
+        // На экране нет пункта «Режим»
+        compose.onAllNodesWithText(RU.mode).assertCountEquals(0)
+        // Кнопками: дойти до «Настройки» и нажать
+        val menu = com.retrohome.launcher.ui.console.startMenu(RU, ModeOverride.AUTO, actions, appMode = true)
+        val settings = menu.indexOfFirst { it.title == RU.settings }
+        compose.runOnIdle { repeat(settings) { pads.dispatch(Pad.DOWN) }; pads.dispatch(Pad.CONFIRM) }
+        compose.runOnIdle { assertEquals("settings", actions.log.last()) }
+        // Касанием: тап по «Wi-Fi» открывает именно Wi-Fi
+        val wifi = menu.indexOfFirst { it.title == RU.wifi }
+        compose.runOnIdle { state.menuIndex = wifi; state.overlay = ConsoleOverlay.Start }
+        compose.mainClock.advanceTimeBy(600)
+        compose.waitForIdle()
+        compose.onNodeWithText(RU.wifi).performClick()
+        compose.runOnIdle { assertEquals("wifi", actions.log.last()) }
     }
 
     @Test fun startMenuHasNoModeSwitchInAppMode() {

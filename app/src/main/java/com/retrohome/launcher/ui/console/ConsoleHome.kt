@@ -576,7 +576,7 @@ fun ConsoleHome(
         ) {
             MenuPanel(
                 title = s.menuTitle,
-                items = startMenu(s, mode, actions, audio, gameSort),
+                items = startMenu(s, mode, actions, audio, gameSort, appMode),
                 selected = state.menuIndex,
                 cancelGlyph = cancelGlyph,
                 modifier = Modifier.fillMaxHeight().width(330.dp).statusBarsPadding().navigationBarsPadding(),
