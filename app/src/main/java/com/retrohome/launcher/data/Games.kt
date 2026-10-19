@@ -17,6 +17,8 @@ data class Game(
     val folder: String,
     /** Все диски многодисковой игры (первый — тот же файл, что id/path). */
     val discs: List<Disc> = emptyList(),
+    /** Номер игры для эмулятора, который запускает её по номеру (Vita: «PCSE00120»). */
+    val titleId: String? = null,
 ) {
     val key: String get() = GAME_PREFIX + id
     val fileName: String get() = path.substringAfterLast('/')
@@ -93,7 +95,8 @@ object GameFiles {
         GameSystem.PS2 to setOf("iso", "chd", "cso", "zso", "gz", "mdf", "nrg", "img", "cue", "elf"),
         GameSystem.PS3 to setOf("iso"),
         GameSystem.PSP to setOf("iso", "cso", "chd", "pbp", "elf", "zso"),
-        GameSystem.VITA to setOf("vpk"),
+        // .psvita — заглушка ES-DE с номером игры внутри; сама игра установлена в Vita3K
+        GameSystem.VITA to setOf("psvita", "vpk", "zip"),
         GameSystem.MD to setOf("md", "gen", "smd", "bin", "sgd", "68k") + retroArchive,
         GameSystem.SMS to setOf("sms") + retroArchive,
         GameSystem.GG to setOf("gg") + retroArchive,
@@ -224,7 +227,7 @@ object TitleParser {
         when {
             "rus" in l -> "RUS"
             l in regionCodes -> regionCodes[l]
-            tag == "!" || hexIdRe.matches(tag) || versionRe.matches(tag) -> null
+            tag == "!" || hexIdRe.matches(tag) || versionRe.matches(tag) || VitaGames.isTitleId(tag) -> null
             Regex("""\d{1,2}\.\d{1,2}\.\d{2,4}""").containsMatchIn(tag) -> null
             tag.length > 18 -> null
             else -> tag

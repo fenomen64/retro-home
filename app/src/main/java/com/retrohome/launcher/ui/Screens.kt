@@ -222,13 +222,15 @@ fun SettingsScreen(
     val s = LocalStrings.current
     val first = remember { FocusRequester() }
     LaunchedEffect(focusFirst) { if (focusFirst) runCatching { first.requestFocus() } }
+    val appMode = LocalAppMode.current
     ScreenFrame(s.settingsTitle, onBack) {
         LazyColumn(Modifier.fillMaxSize()) {
             item { SectionHeader(s.secGeneral) }
             item {
                 ChoiceRow(s.language, s.langName, Modifier.focusRequester(first)) { a.toggleLang() }
             }
-            item {
+            // В режиме приложения экран всегда консольный — выбирать нечего
+            if (!appMode) item {
                 ModeRow(settings.mode, a::setMode)
             }
             item {

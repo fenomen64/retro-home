@@ -21,7 +21,7 @@
 
 ### Консольный режим (горизонтально)
 - **Вкладки по консолям:** лаунчер сам находит игры в папке ROMs и раскладывает их по системам: PS1, PS2, PSP, GameCube, Wii, Switch, 3DS, DS, GBA, SNES, N64, Mega Drive, Dreamcast и другие.
-- **Запуск в нужном эмуляторе одной кнопкой.** Лаунчер распознаёт RetroArch, DuckStation, ARMSX2, NetherSX2/AetherSX2, PPSSPP, Dolphin, Citra/Azahar, Eden/Yuzu, melonDS, DraStic, Flycast, Redream, Mupen64Plus, Lemuroid, My Boy!, Pizza Boy, Vita3K, ScummVM, JoiPlay, MAME4droid и другие. Эмуляторы, которых нет в списке, подхватываются автоматически: лаунчер определяет консоль по названию и запускает игры в них напрямую. Для каждой консоли эмулятор можно выбрать вручную.
+- **Запуск в нужном эмуляторе одной кнопкой.** Лаунчер распознаёт RetroArch, DuckStation, ARMSX2, NetherSX2/AetherSX2, PPSSPP, Dolphin, Citra/Azahar, Eden/Yuzu, melonDS, DraStic, Flycast, Redream, Mupen64Plus, Lemuroid, MD.emu и другие эмуляторы Explusalpha, My Boy!, Pizza Boy, Vita3K, ScummVM, JoiPlay, MAME4droid и другие. Эмуляторы, которых нет в списке, подхватываются автоматически: лаунчер определяет консоль по названию и запускает игры в них напрямую. Для каждой консоли эмулятор можно выбрать вручную.
 - **Обложки и снимки из игр** из открытой базы libretro-thumbnails. Для Switch — свои обложки.
 - **Описания, жанр, разработчик и год** из Википедии и Викиданных на русском и английском. Лаунчер учитывает консоль, поэтому ремейк не попадёт вместо оригинала.
 - **Страница игры:** описание, факты, время в игре, выбор диска для многодисковых игр.
@@ -40,8 +40,12 @@
 ## Установка
 
 1. Скачайте `RetroHome-*.apk` из раздела [Releases](../../releases) и установите (может понадобиться разрешить установку из неизвестных источников).
-2. Нажмите кнопку «Домой» и выберите **Retro Home** как приложение по умолчанию.
+2. Нажмите кнопку «Домой» и выберите **Retro Home** как приложение по умолчанию. Если хотите оставить свой лаунчер — просто открывайте Retro Home значком из списка приложений: он запустится как обычное приложение в консольном режиме.
 3. В консольном режиме: **START → Папка ROMs**, выберите папку с играми (вложенные папки вида `psx`, `ps2`, `gba`… распознаются автоматически).
+
+Особые случаи:
+- **PS Vita (Vita3K):** игры запускаются по номеру вида `PCSE00120`. Подойдут заглушки ES-DE — файлы `.psvita` с номером внутри — или номер в имени файла: `Игра [PCSE00120].vpk`.
+- **Lemuroid** открывает игры только из своей библиотеки. Чтобы запускать игру сразу, создайте в Lemuroid её ярлык (удерживайте игру → «Создать ярлык»), когда Retro Home — главный экран.
 
 Необязательные настройки (**START → Настройки**):
 - **Почта для Википедии.** С ней описания загружаются в десятки раз быстрее: Википедия разрешает 200 запросов в минуту вместо 10.
@@ -107,7 +111,7 @@ Built for the Retroid Pocket G2, but it works on any device with Android 10+: ot
 - The UI is available in Russian and English.
 
 ### Install
-Download the APK from [Releases](../../releases), set Retro Home as the default home app, then in console mode open **START → ROMs folder** and pick your games folder.
+Download the APK from [Releases](../../releases), set Retro Home as the default home app (or keep your launcher and open Retro Home from the app drawer: it runs as a regular app in console mode), then open **START → ROMs folder** and pick your games folder. PS Vita games need their title ID (ES-DE `.psvita` stubs or `[PCSE00120]` in the file name); Lemuroid launches a game directly once you create its shortcut in Lemuroid while Retro Home is the home screen.
 
 ### Build
 JDK 21 and the Android SDK (compileSdk 36): `./gradlew testDebugUnitTest assembleDebug`. To sign with your own key, copy `keystore.properties.example` to `keystore.properties`.

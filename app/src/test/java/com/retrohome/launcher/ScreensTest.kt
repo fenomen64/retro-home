@@ -1198,3 +1198,65 @@ class ScreensTest {
         compose.runOnIdle { assertEquals(listOf(-1, -1, 1), steps) }
     }
 }
+
+/** Retro Home, открытый значком как обычное приложение. */
+@RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(application = Application::class, sdk = [35])
+class AppModeUiTest {
+    @get:Rule val compose = createComposeRule()
+    private val pads = PadRegistry()
+
+    @Test
+    @Config(qualifiers = "w768dp-h432dp-land-xhdpi")
+    fun backOnHomeTabExitsOnlyInAppMode() {
+        var exits = 0
+        val appMode = mutableStateOf(true)
+        val state = ConsoleState()
+        compose.setContent {
+            CompositionLocalProvider(
+                LocalStrings provides RU,
+                LocalIconLoader provides FakeIcons,
+                com.retrohome.launcher.ui.LocalCoverLoader provides FakeCovers,
+                com.retrohome.launcher.ui.LocalRemoteImages provides FakeBadges,
+                com.retrohome.launcher.audio.LocalSfx provides RecordingSfx(),
+                LocalPadRegistry provides pads,
+                com.retrohome.launcher.ui.LocalAppMode provides appMode.value,
+                com.retrohome.launcher.ui.LocalAppExit provides { exits++ },
+            ) {
+                ConsoleHome(buildConsoleTabs(sampleApps, sampleData, RU, com.retrohome.launcher.ui.console.GamesInfo(hasFolder = true)), state, ModeOverride.AUTO, false, RecordingConsoleActions())
+            }
+        }
+        // Не на главной вкладке «назад» сначала возвращает на главную
+        compose.runOnIdle { pads.dispatch(Pad.R1); pads.dispatch(Pad.CANCEL) }
+        compose.runOnIdle { assertEquals(0, state.tab); assertEquals(0, exits) }
+        compose.runOnIdle { pads.dispatch(Pad.CANCEL) }
+        compose.runOnIdle { assertEquals(1, exits) }
+        // На главном экране (не в режиме приложения) «назад» ничего не закрывает
+        compose.runOnIdle { appMode.value = false }
+        compose.runOnIdle { pads.dispatch(Pad.CANCEL) }
+        compose.runOnIdle { assertEquals(1, exits) }
+    }
+
+    @Test fun startMenuHasNoModeSwitchInAppMode() {
+        val actions = RecordingConsoleActions()
+        val normal = com.retrohome.launcher.ui.console.startMenu(RU, ModeOverride.AUTO, actions)
+        val app = com.retrohome.launcher.ui.console.startMenu(RU, ModeOverride.AUTO, actions, appMode = true)
+        assertTrue(normal.any { it.title == RU.mode })
+        assertTrue(app.none { it.title == RU.mode })
+        assertEquals(normal.size - 1, app.size)
+    }
+
+    @Test fun iconOpensAppModeAndHomeStaysHome() {
+        val app = org.robolectric.RuntimeEnvironment.getApplication()
+        val pm = app.packageManager
+        val launcher = pm.queryIntentActivities(
+            android.content.Intent(android.content.Intent.ACTION_MAIN).addCategory(android.content.Intent.CATEGORY_LAUNCHER).setPackage(app.packageName), 0,
+        ).map { it.activityInfo.name }
+        assertEquals(listOf(AppModeActivity::class.java.name), launcher)
+        val home = pm.queryIntentActivities(
+            android.content.Intent(android.content.Intent.ACTION_MAIN).addCategory(android.content.Intent.CATEGORY_HOME).setPackage(app.packageName), 0,
+        ).map { it.activityInfo.name }
+        assertEquals(listOf(MainActivity::class.java.name), home)
+    }
+}

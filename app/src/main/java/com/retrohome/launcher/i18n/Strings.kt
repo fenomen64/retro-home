@@ -248,6 +248,8 @@ data class Strings(
     val ra: RaStrings,
     /** Проверка соединения. */
     val net: NetStrings,
+    /** Эмуляторы с особым запуском (Lemuroid). */
+    val emu: EmuStrings,
 ) {
     val langName: String get() = if (lang == Lang.RU) "Русский" else "English"
 
@@ -532,6 +534,13 @@ val RU = Strings(
     pickMusic = "Выбрать свою мелодию",
     pickMusicDesc = "Любой аудиофайл с устройства, будет играть по кругу",
     musicVolume = "Громкость музыки",
+    emu = EmuStrings(
+        lemuroidHint = "Lemuroid не умеет открывать игру по файлу, поэтому открыт его список игр. Чтобы запускать сразу: в Lemuroid удерживайте игру → «Создать ярлык» — Retro Home запомнит её",
+        lemuroidHintNotHome = "Lemuroid не умеет открывать игру по файлу, поэтому открыт его список игр. Прямой запуск работает через ярлыки, а их принимает только главный экран: сделайте Retro Home главным экраном и создайте ярлык игры в Lemuroid",
+        lemuroidLinked = "«%s» теперь запускается в Lemuroid сразу",
+        shortcutUnsupported = "Retro Home принимает только ярлыки игр Lemuroid",
+        vitaNoId = "Не найден номер игры (вида PCSE00120), поэтому открыт список игр Vita3K. Положите рядом заглушку .psvita с номером внутри или добавьте номер в имя файла: «Игра [PCSE00120].vpk»",
+    ),
     net = NetStrings(
         title = "Проверка соединения",
         desc = "Почему не грузятся обложки и описания",
@@ -824,6 +833,13 @@ val EN = Strings(
     pickMusic = "Choose your own track",
     pickMusicDesc = "Any audio file from the device, played on a loop",
     musicVolume = "Music volume",
+    emu = EmuStrings(
+        lemuroidHint = "Lemuroid can't open a game from a file, so its game list was opened. To launch directly: in Lemuroid long-press the game → \"Create shortcut\" and Retro Home will remember it",
+        lemuroidHintNotHome = "Lemuroid can't open a game from a file, so its game list was opened. Direct launch works through shortcuts, and only the home screen receives them: make Retro Home your home screen and create the game's shortcut in Lemuroid",
+        lemuroidLinked = "\"%s\" now launches in Lemuroid directly",
+        shortcutUnsupported = "Retro Home only accepts Lemuroid game shortcuts",
+        vitaNoId = "No game ID (like PCSE00120) was found, so Vita3K's game list was opened. Put a .psvita stub with the ID inside next to the game or add the ID to the file name: \"Game [PCSE00120].vpk\"",
+    ),
     net = NetStrings(
         title = "Connection check",
         desc = "Why covers and descriptions don't load",
@@ -915,6 +931,15 @@ data class RaStrings(
     val raFail: String,
     val raNet: String,
     val raRemove: String,
+)
+
+/** Тексты про эмуляторы с особым запуском. */
+data class EmuStrings(
+    val lemuroidHint: String,
+    val lemuroidHintNotHome: String,
+    val lemuroidLinked: String,
+    val shortcutUnsupported: String,
+    val vitaNoId: String,
 )
 
 /** Тексты проверки соединения. */

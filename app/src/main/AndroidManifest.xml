@@ -43,6 +43,8 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="content" android:mimeType="*/*" />
         </intent>
+        <!-- Lemuroid открывает игры только по своим ссылкам lemuroid:// -->
+        <package android:name="com.swordfish.lemuroid" />
     </queries>
 
     <uses-permission android:name="android.permission.SET_WALLPAPER" />
@@ -80,7 +82,34 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.HOME" />
                 <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- Значок в списке приложений: Retro Home как обычное приложение, без замены своего лаунчера.
+             Отдельная задача — чтобы быть в списке открытых приложений и возвращаться сюда после игры -->
+        <activity
+            android:name=".AppModeActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.retrohome.launcher.app"
+            android:screenOrientation="sensorLandscape"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density|locale|layoutDirection"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Ярлыки игр из Lemuroid («Создать ярлык»): так лаунчер узнаёт номер игры в его библиотеке -->
+        <activity
+            android:name=".PinShortcutActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.content.pm.action.CONFIRM_PIN_SHORTCUT" />
             </intent-filter>
         </activity>
     </application>

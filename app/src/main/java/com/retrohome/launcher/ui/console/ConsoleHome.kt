@@ -196,7 +196,11 @@ data class MenuEntry(
 fun choiceEntry(title: String, value: String, step: (Int) -> Unit) =
     MenuEntry(title, value, closeAfter = false, step = step) { step(1) }
 
-fun startMenu(s: Strings, mode: ModeOverride, a: ConsoleActions, audio: AudioState = AudioState(), gameSort: String = "name"): List<MenuEntry> = listOf(
+fun startMenu(
+    s: Strings, mode: ModeOverride, a: ConsoleActions, audio: AudioState = AudioState(), gameSort: String = "name",
+    /** Открыт как приложение: режим не выбирается, он всегда консольный. */
+    appMode: Boolean = false,
+): List<MenuEntry> = listOfNotNull(
     MenuEntry(s.search) { a.openSearch() },
     choiceEntry(s.sortGames, s.sortName(gameSort)) { a.cycleSortGames(it) },
     choiceEntry(s.sounds, s.packName(audio.sfxPack)) { a.cycleSfx(it) },
@@ -205,7 +209,7 @@ fun startMenu(s: Strings, mode: ModeOverride, a: ConsoleActions, audio: AudioSta
     MenuEntry(s.updateMeta) { a.refreshMeta() },
     MenuEntry(s.romsFolder) { a.pickRomsFolder() },
     choiceEntry(s.language, s.langName) { a.toggleLang() },
-    choiceEntry(
+    if (appMode) null else choiceEntry(
         s.mode,
         when (mode) {
             ModeOverride.AUTO -> s.modeAuto
@@ -279,6 +283,8 @@ fun ConsoleHome(
     val tabsNow by rememberUpdatedState(tabs)
     val modeNow by rememberUpdatedState(mode)
     val sNow by rememberUpdatedState(s)
+    val appMode = com.retrohome.launcher.ui.LocalAppMode.current
+    val exitApp by rememberUpdatedState(com.retrohome.launcher.ui.LocalAppExit.current)
 
     fun openDescription(e: ConsoleEntry, log: Boolean = false) {
         state.descScroll = ScrollState(0)
@@ -296,7 +302,7 @@ fun ConsoleHome(
     }
 
     fun menuItems(): List<MenuEntry> = when (val o = state.overlay) {
-        ConsoleOverlay.Start -> startMenu(sNow, modeNow, actions, audioNow, gameSortNow)
+        ConsoleOverlay.Start -> startMenu(sNow, modeNow, actions, audioNow, gameSortNow, appMode)
         is ConsoleOverlay.Item -> itemMenu(
             sNow, o.entry, actions, { openDescription(o.entry) }, { openDescription(o.entry, log = true) },
             { openAchievements(o.entry) },
@@ -447,7 +453,7 @@ fun ConsoleHome(
                     Pad.Y -> state.selected(t)?.let { actions.toggleFavorite(it.key); sfx.play(Sfx.FAVORITE) }
                     Pad.START -> { state.menuIndex = 0; state.overlay = ConsoleOverlay.Start; sfx.play(Sfx.MENU) }
                     Pad.SELECT -> { sfx.play(Sfx.SELECT); actions.openSearch() }
-                    Pad.CANCEL -> if (state.tab != 0) { state.tab = 0; sfx.play(Sfx.BACK) }
+                    Pad.CANCEL -> if (state.tab != 0) { state.tab = 0; sfx.play(Sfx.BACK) } else if (appMode) { sfx.play(Sfx.BACK); exitApp() }
                 }
                 true
             }

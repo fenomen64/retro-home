@@ -49,7 +49,7 @@ object Scanner {
                 else -> runCatching { GameSystem.valueOf(o) }.getOrNull()
             }
             val found = if (system != null && GameFiles.extensions.containsKey(system)) {
-                scanSystemDir(src, dir, system, dir.name, 0)
+                scanSystemDir(src, dir, system, dir.name, 0).let { if (system == GameSystem.VITA) VitaGames.dedupe(it) else it }
             } else emptyList()
             games += found
             folders += FolderInfo(dir.name, detected, system, found.size)
@@ -79,7 +79,8 @@ object Scanner {
                 if (tid != null && !tid.endsWith("000")) continue
             }
             val p = TitleParser.full(f.name)
-            val g = Game(f.id, src.pathOf(f), system, p.title, p.tags, folder)
+            val titleId = if (system == GameSystem.VITA) VitaGames.titleId(f.name, if (GameFiles.extension(f.name) == "psvita") src.readText(f, 256) else null) else null
+            val g = Game(f.id, src.pathOf(f), system, p.title, p.tags, folder, titleId = titleId)
             if (p.disc != null) discGroups.getOrPut(p.title.lowercase()) { ArrayList() } += g to p.disc
             else result += g
         }
@@ -96,6 +97,30 @@ object Scanner {
             }
         }
         return result
+    }
+}
+
+/**
+ * Игры PS Vita. Vita3K запускает только установленные в нём игры — по номеру вида PCSE00120.
+ * Номер берётся из заглушки ES-DE (файл .psvita с номером внутри) или из имени файла «… [PCSE00120].vpk».
+ */
+object VitaGames {
+    private val idRe = Regex("""\b([A-Z]{4}\d{5})\b""")
+
+    fun titleId(fileName: String, content: String?): String? =
+        content?.let { idRe.find(it.trim().uppercase())?.groupValues?.get(1) } ?: idRe.find(fileName.uppercase())?.groupValues?.get(1)
+
+    fun isTitleId(s: String) = idRe.matches(s.trim())
+
+    /** Рядом с заглушкой часто лежит и сам файл игры (для установки) — показываем игру один раз, по заглушке. */
+    fun dedupe(games: List<Game>): List<Game> {
+        val stubs = games.filter { GameFiles.extension(it.fileName) == "psvita" }
+        if (stubs.isEmpty()) return games
+        val ids = stubs.mapNotNull { it.titleId }.toSet()
+        val titles = stubs.map { it.title.lowercase() }.toSet()
+        return games.filter { g ->
+            GameFiles.extension(g.fileName) == "psvita" || (g.titleId !in ids && g.title.lowercase() !in titles)
+        }
     }
 }
 

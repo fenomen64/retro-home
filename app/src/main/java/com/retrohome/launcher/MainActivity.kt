@@ -54,7 +54,13 @@ import com.retrohome.launcher.ui.PadRegistry
 import com.retrohome.launcher.ui.Palette
 import kotlinx.coroutines.flow.MutableSharedFlow
 
-class MainActivity : ComponentActivity() {
+/**
+ * Главный экран (HOME). Его же наследует [AppModeActivity] — запуск значком как обычное приложение.
+ */
+open class MainActivity : ComponentActivity() {
+    /** Открыт как приложение, а не как главный экран: всегда консоль, «назад» — выход. */
+    protected open val appMode: Boolean get() = false
+
     companion object {
         private const val REQ_CONFIGURE_WIDGET = 7101
     }
@@ -138,7 +144,7 @@ class MainActivity : ComponentActivity() {
         handler.removeCallbacks(restoreOrientation)
         // Пока лаунчер скрыт, его поворот закреплён таким, каким он был на экране: при возврате
         // система не спрашивает датчик (его старое значение и переворачивало обои)
-        if (controller.store.data.value.settings.mode == ModeOverride.AUTO) {
+        if (!appMode && controller.store.data.value.settings.mode == ModeOverride.AUTO) {
             requestedOrientation = if (lastOrientation == Configuration.ORIENTATION_LANDSCAPE)
                 ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE else ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         }
@@ -177,7 +183,7 @@ class MainActivity : ComponentActivity() {
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
     private val restoreOrientation = Runnable { applyOrientation(controller.store.data.value.settings.mode) }
 
-    private fun orientationFor(mode: ModeOverride) = when (mode) {
+    private fun orientationFor(mode: ModeOverride) = if (appMode) ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE else when (mode) {
         ModeOverride.AUTO -> ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
         ModeOverride.CONSOLE -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         ModeOverride.PHONE -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
@@ -219,8 +225,8 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
         )
         super.onCreate(savedInstanceState)
-        // Лаунчер нельзя закрыть кнопкой «назад»
-        onBackPressedDispatcher.addCallback(this) { }
+        // Главный экран нельзя закрыть кнопкой «назад»; приложение — уходит в фон (как обычные игры)
+        onBackPressedDispatcher.addCallback(this) { if (appMode) moveTaskToBack(true) }
 
         val c = controller
         sounds = SoundPlayer(this)
@@ -255,7 +261,7 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(mode) { applyOrientation(mode) }
             val st = data.settings
             val icons = remember(st.iconPack) { c.apps.iconPack = st.iconPack; iconLoader() }
-            val consoleNow = isConsoleMode(st.mode, LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE)
+            val consoleNow = appMode || isConsoleMode(st.mode, LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE)
             LaunchedEffect(st.sfxPack, st.sfxVolume) { sounds.configure(soundPackOf(st.sfxPack), st.sfxVolume) }
             LaunchedEffect(st.haptics) { haptics.level = hapticLevelOf(st.haptics) }
             LaunchedEffect(st.theme, st.accent) { Palette.apply(st.theme, st.accent) }
@@ -280,6 +286,8 @@ class MainActivity : ComponentActivity() {
                     LocalSfx provides feedback,
                     LocalHapticTarget provides { haptics.target() },
                     com.retrohome.launcher.ui.phone.LocalWidgetRenderer provides widgetRenderer,
+                    com.retrohome.launcher.ui.LocalAppMode provides appMode,
+                    com.retrohome.launcher.ui.LocalAppExit provides { moveTaskToBack(true) },
                 ) {
                     MainScreen(
                         data = data,

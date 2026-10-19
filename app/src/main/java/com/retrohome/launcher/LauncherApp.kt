@@ -112,6 +112,11 @@ class LauncherController(
     }
 
     init {
+        // Игры, ярлыки которых созданы в Lemuroid: название → номер в его библиотеке
+        com.retrohome.launcher.data.Lemuroid.load(context)
+    }
+
+    init {
         // Достижения: опознать новые игры после каждого сканирования
         scope.launch {
             games.result.collect { r -> if (r.games.isNotEmpty()) achievements.sync(r.games, ::raTitles) }
@@ -288,9 +293,17 @@ class LauncherController(
         val activity = recipe.activities.firstOrNull { cls ->
             runCatching { pm.getActivityInfo(ComponentName(pkg, cls), 0) }.isSuccess
         } ?: recipe.activities.first()
-        val intent = recipe.build(LaunchContext(pkg, activity, games.documentUri(tree, game), game.path, game.system))
+        val titles = listOfNotNull(data.titleOverrides[base.id], base.title, base.fileName.substringBeforeLast('.'))
+        val intent = recipe.build(LaunchContext(pkg, activity, games.documentUri(tree, game), game.path, game.system, base.titleId, titles))
         try {
             context.startActivity(intent)
+            if (recipe.id == "lemuroid" && com.retrohome.launcher.data.Lemuroid.idFor(titles) == null) {
+                // Lemuroid открылся на своём списке игр — подсказать, как запускать сразу
+                val home = com.retrohome.launcher.data.Lemuroid.canReceiveShortcuts(context)
+                toast(if (home) strings.emu.lemuroidHint else strings.emu.lemuroidHintNotHome)
+            }
+            // Vita3K открылся на своём списке: номер игры не нашёлся
+            if (recipe.id == "vita3k" && base.titleId == null) toast(strings.emu.vitaNoId)
             recordRecent(key)
             // Время в игре: точно по статистике Android, если есть доступ, иначе — до возврата в лаунчер
             settleSession()
@@ -312,6 +325,9 @@ class LauncherController(
     /** Лаунчер снова на экране: посчитать время запущенной игры. */
     fun onLauncherResumed() {
         usageAccess.value = UsageTime.hasAccess(context)
+        // Ярлыки Lemuroid, закреплённые на этом главном экране
+        val installed = installedPackages()
+        scope.launch(Dispatchers.IO) { com.retrohome.launcher.data.Lemuroid.syncPinned(context, installed) }
         // Вернулись из игры — могли открыться новые достижения
         achievements.refreshProgress()
         settleSession()

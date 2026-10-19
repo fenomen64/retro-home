@@ -38,6 +38,15 @@ import com.retrohome.launcher.audio.Sfx
 
 enum class Screen { SETTINGS, CONSOLE_APPS, HIDDEN_APPS, SEARCH, FOLDERS, SYSTEM_PICKER, EMULATORS, TITLE_EDIT, CONSOLE_TABS, WIDGETS, CONTACT, RA_ACCOUNT, NETWORK_CHECK }
 
+/**
+ * Лаунчер открыт как обычное приложение (значком из чужого лаунчера), а не как главный экран:
+ * всегда консольный режим, «назад» на главной вкладке — выход из приложения.
+ */
+val LocalAppMode = androidx.compose.runtime.staticCompositionLocalOf { false }
+
+/** Выйти из приложения (только в режиме приложения). */
+val LocalAppExit = androidx.compose.runtime.staticCompositionLocalOf<() -> Unit> { {} }
+
 /** Выбор режима: по повороту или принудительно из настроек. */
 fun isConsoleMode(mode: ModeOverride, landscape: Boolean) = when (mode) {
     ModeOverride.CONSOLE -> true
@@ -61,7 +70,7 @@ fun MainScreen(
     onAddWidget: (com.retrohome.launcher.data.WidgetOption, Int) -> Unit = { _, _ -> },
 ) {
     val s = LocalStrings.current
-    val console = isConsoleMode(data.settings.mode, landscape)
+    val console = LocalAppMode.current || isConsoleMode(data.settings.mode, landscape)
     val stack = remember { mutableStateListOf<Screen>() }
     val consoleState = remember { ConsoleState() }
     val phoneState = remember { PhoneState() }

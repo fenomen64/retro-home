@@ -29,6 +29,10 @@ data class LaunchContext(
     /** Обычный путь к файлу. */
     val path: String,
     val system: GameSystem,
+    /** Номер игры, по которому её открывает эмулятор (Vita: «PCSE00120»). */
+    val gameId: String? = null,
+    /** Названия игры (своё, исправленное, из имени файла) — для эмуляторов, которые ищут игру в своей библиотеке. */
+    val titles: List<String> = emptyList(),
 )
 
 private fun base(c: LaunchContext, action: String? = null): Intent =
@@ -77,6 +81,14 @@ object Launchers {
         "me.magnum.melonds.dev" to "me.magnum.melonds.dev.LAUNCH_ROM",
         "me.magnum.melondualds" to "me.magnum.melonds.dev.LAUNCH_ROM",
     )
+
+    /**
+     * Эмуляторы Explusalpha: одна и та же активити com.imagine.BaseActivity, игра — «открыть файл».
+     * Пакеты — как в описаниях платформ Daijishō.
+     */
+    private fun imagine(id: String, name: String, systems: Set<GameSystem>, vararg packages: String) = LaunchRecipe(
+        id, name, systems, packages = packages.toList(), activities = listOf("com.imagine.BaseActivity"),
+    ) { c -> base(c, Intent.ACTION_VIEW).setData(c.uri).grantUri(c.uri) }
 
     val all: List<LaunchRecipe> = listOf(
         LaunchRecipe(
@@ -182,6 +194,36 @@ object Launchers {
             packages = listOf("com.fastemulator.gbc"),
             activities = listOf("com.fastemulator.gbc.EmulatorActivity"),
         ) { c -> base(c, Intent.ACTION_VIEW).setData(c.uri) },
+        imagine("mdemu", "MD.emu", setOf(GameSystem.MD, GameSystem.SMS, GameSystem.GG), "com.explusalpha.MdEmu"),
+        imagine("nesemu", "NES.emu", setOf(GameSystem.NES), "com.explusalpha.NesEmu"),
+        imagine("snes9xplus", "Snes9x EX+", setOf(GameSystem.SNES), "com.explusalpha.Snes9xPlus"),
+        imagine("gbaemu", "GBA.emu", setOf(GameSystem.GBA), "com.explusalpha.GbaEmu"),
+        imagine("gbcemu", "GBC.emu", setOf(GameSystem.GB, GameSystem.GBC), "com.explusalpha.GbcEmu"),
+        imagine("pceemu", "PCE.emu", setOf(GameSystem.PCE), "com.explusalpha.PceEmu"),
+        imagine("neoemu", "NEO.emu", setOf(GameSystem.ARCADE), "com.explusalpha.NeoEmu", "com.explusalpha.neoemu"),
+        imagine("saturnemu", "Saturn.emu", setOf(GameSystem.SATURN), "com.explusalpha.SaturnEmu"),
+        LaunchRecipe(
+            // Vita3K запускает уже установленную в нём игру по номеру: «-r PCSE00120»
+            "vita3k", "Vita3K", setOf(GameSystem.VITA),
+            packages = listOf("org.vita3k.emulator", "org.vita3kplus.emulator", "org.vita3k.emulator.ikhoeyZX", "org.vita3k.emulator.debug"),
+            activities = listOf("org.vita3k.emulator.Emulator"),
+        ) { c ->
+            val id = c.gameId
+            if (id != null) {
+                Intent().apply {
+                    setClassName(c.pkg, c.activity)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                    putExtra("AppStartParameters", arrayOf("-r", id))
+                }
+            } else {
+                // Номер игры неизвестен — открываем Vita3K на его списке игр
+                Intent(Intent.ACTION_MAIN).apply {
+                    addCategory(Intent.CATEGORY_LAUNCHER)
+                    setClassName(c.pkg, VITA3K_MAIN)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+                }
+            }
+        },
         LaunchRecipe(
             "retroarch", "RetroArch", retroArchCores.keys,
             packages = listOf("com.retroarch.aarch64", "com.retroarch", "com.retroarch.ra32"),
@@ -197,7 +239,30 @@ object Launchers {
                 putExtra("QUITFOCUS", "")
             }
         },
+        LaunchRecipe(
+            // Последним: прямой запуск только для игр, ярлык которых уже создан в Lemuroid (см. [Lemuroid])
+            "lemuroid", "Lemuroid", Lemuroid.systems.toSet(),
+            packagePrefix = Lemuroid.PACKAGE_PREFIX,
+            activities = listOf(Lemuroid.GAME_ACTIVITY),
+        ) { c ->
+            val id = Lemuroid.idFor(c.titles)
+            if (id != null) {
+                Intent(Intent.ACTION_VIEW, Lemuroid.gameUri(c.pkg, id)).apply {
+                    setClassName(c.pkg, c.activity)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                }
+            } else {
+                // Номер игры неизвестен — открываем Lemuroid на его списке игр
+                Intent(Intent.ACTION_MAIN).apply {
+                    addCategory(Intent.CATEGORY_LAUNCHER)
+                    setClassName(c.pkg, Lemuroid.MAIN_ACTIVITY)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+                }
+            }
+        },
     )
+
+    const val VITA3K_MAIN = "org.vita3k.emulator.MainActivity"
 
     fun byId(id: String) = all.firstOrNull { it.id == id }
 
