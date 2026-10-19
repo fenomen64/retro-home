@@ -160,7 +160,13 @@ object Launchers {
             packages = listOf(
                 "dev.eden.eden_emulator", "dev.legacy.eden_emulator", "dev.eden.eden_nightly",
                 "dev.eden.eden_emulator.nightly", "org.yuzu.yuzu_emu", "org.yuzu.yuzu_emu.ea",
+                // «Оптимизированная» ночная сборка Eden ставится под пакетом Genshin Impact
+                // (ради игровых ускорений прошивки); в список установленных он попадает,
+                // только если внутри действительно Eden (см. SpoofedEmulators)
+                SpoofedEmulators.GENSHIN,
             ),
+            // Прочие сборки Eden (ночные «рядом с основной» и т. п.)
+            packagePrefix = "dev.eden.",
             activities = listOf("org.yuzu.yuzu_emu.activities.EmulationActivity"),
         ) { c -> base(c, "android.nfc.action.TECH_DISCOVERED").setData(c.uri) },
         LaunchRecipe(
@@ -303,6 +309,27 @@ object Launchers {
     const val EMUCOREV_MAIN = "com.sbro.emucorev.MainActivity"
 
     fun byId(id: String) = all.firstOrNull { it.id == id }
+
+    /**
+     * Доступ ко всей папке ROMs для эмулятора, которому передаём файл по content://.
+     * Игре из нескольких файлов это необходимо: в .cue/.m3u/.gdi только ссылки на соседние
+     * файлы (.bin, диски), и открыть их эмулятор может лишь с доступом к папке —
+     * иначе «Failed to open CD image … Failed to open '….bin'». Сохранения рядом с игрой — так же.
+     */
+    fun withFolderAccess(intent: Intent, tree: Uri?): Intent {
+        if (tree == null) return intent
+        val usesContent = intent.clipData != null || intent.data?.scheme == "content"
+        if (!usesContent) return intent
+        val clip = intent.clipData
+        val has = clip != null && (0 until clip.itemCount).any { clip.getItemAt(it).uri == tree }
+        if (!has) {
+            if (clip == null) intent.clipData = android.content.ClipData.newRawUri("roms", tree)
+            else clip.addItem(android.content.ClipData.Item(tree))
+        }
+        return intent.addFlags(
+            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_PREFIX_URI_PERMISSION
+        )
+    }
 
     /** Есть ли для пакета готовый рецепт запуска. */
     fun knows(pkg: String): Boolean = all.any { r -> pkg in r.packages || r.packagePrefix?.let { pkg.startsWith(it) } == true }

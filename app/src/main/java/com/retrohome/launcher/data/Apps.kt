@@ -93,7 +93,8 @@ class AppRepository(private val context: Context, private val scope: CoroutineSc
                         packageName = info.componentName.packageName,
                         label = label,
                         isGame = isGame,
-                        emulator = Emulators.match(info.componentName.packageName, label)
+                        emulator = SpoofedEmulators.detect(context, info.componentName.packageName)
+                            ?: Emulators.match(info.componentName.packageName, label)
                             ?: Emulators.guess(info.componentName.packageName, label, info.componentName.packageName in openers),
                     )
                 }

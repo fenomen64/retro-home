@@ -894,7 +894,7 @@ class MetaRepository(
     }
 
     companion object {
-        const val VERSION = "0.34"
+        const val VERSION = "0.35"
         /** Страница проекта — контакт в подписи запросов (Issues для связи). */
         const val PROJECT_URL = "https://github.com/fenomen64/retro-home"
         const val USER_AGENT = "RetroHome/$VERSION (personal Android game launcher)"

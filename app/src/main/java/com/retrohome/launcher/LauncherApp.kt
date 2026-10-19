@@ -189,7 +189,10 @@ class LauncherController(
     private fun toast(text: String) = Toast.makeText(context, text, Toast.LENGTH_LONG).show()
 
     // --- Игры ---
-    private fun installedPackages(): Set<String> = apps.apps.value.map { it.packageName }.toSet()
+    /** Установленные пакеты; пакет «под чужим именем» (Genshin = ночной Eden) — только если это и правда эмулятор. */
+    private fun installedPackages(): Set<String> = apps.apps.value
+        .filter { !com.retrohome.launcher.data.SpoofedEmulators.isSpoofable(it.packageName) || it.emulator != null }
+        .map { it.packageName }.toSet()
 
     fun runnerFor(system: GameSystem): LaunchRecipe? =
         Launchers.choose(system, installedPackages(), data.systemEmulator[system.name], autoRecipes())
@@ -302,7 +305,7 @@ class LauncherController(
         val ctx = LaunchContext(pkg, activity, games.documentUri(tree, game), game.path, game.system, base.titleId, titles, Uri.parse(tree))
         try {
             try {
-                context.startActivity(recipe.build(ctx))
+                context.startActivity(Launchers.withFolderAccess(recipe.build(ctx), ctx.tree))
             } catch (e: SecurityException) {
                 // Доступ ко всей папке выдать не удалось — запускаем только с самим файлом игры
                 context.startActivity(recipe.build(ctx.copy(tree = null)))
