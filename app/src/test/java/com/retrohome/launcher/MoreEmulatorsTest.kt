@@ -108,6 +108,21 @@ class MoreEmulatorsIntentTest {
         assertTrue(i.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
     }
 
+    /** Сохранения пишутся рядом с игрой — эмулятор получает доступ ко всей папке ROMs. */
+    @Test fun explusalphaGetsWholeRomsFolder() {
+        val tree = Uri.parse("content://com.android.externalstorage.documents/tree/F929-FA97%3AROMs")
+        val i = Launchers.byId("gbaemu")!!.build(LaunchContext("com.explusalpha.GbaEmu", "com.imagine.BaseActivity", uri, "/x", GameSystem.GBA, tree = tree))
+        val clip = i.clipData!!
+        assertEquals(listOf(uri, tree), (0 until clip.itemCount).map { clip.getItemAt(it).uri })
+        assertTrue(i.flags and Intent.FLAG_GRANT_PREFIX_URI_PERMISSION != 0)
+        assertTrue(i.flags and Intent.FLAG_GRANT_WRITE_URI_PERMISSION != 0)
+        assertEquals(uri, i.data)
+        // Без папки — только сам файл, без доступа «по префиксу»
+        val plain = Launchers.byId("gbaemu")!!.build(LaunchContext("com.explusalpha.GbaEmu", "com.imagine.BaseActivity", uri, "/x", GameSystem.GBA))
+        assertEquals(1, plain.clipData!!.itemCount)
+        assertTrue(plain.flags and Intent.FLAG_GRANT_PREFIX_URI_PERMISSION == 0)
+    }
+
     @Test fun vita3kGetsTitleId() {
         val r = Launchers.byId("vita3k")!!
         val i = r.build(LaunchContext("org.vita3k.emulator", "org.vita3k.emulator.Emulator", uri, "/x", GameSystem.VITA, gameId = "PCSE00120"))

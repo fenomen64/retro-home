@@ -33,6 +33,8 @@ data class LaunchContext(
     val gameId: String? = null,
     /** Названия игры (своё, исправленное, из имени файла) — для эмуляторов, которые ищут игру в своей библиотеке. */
     val titles: List<String> = emptyList(),
+    /** Выбранная папка ROMs (content://…/tree/…) — для эмуляторов, которые пишут сохранения рядом с игрой. */
+    val tree: Uri? = null,
 )
 
 private fun base(c: LaunchContext, action: String? = null): Intent =
@@ -49,6 +51,18 @@ private fun base(c: LaunchContext, action: String? = null): Intent =
 /** Расширенный адрес передаём и как строку (так ждут эмуляторы), и в clipData, чтобы сработало разрешение. */
 private fun Intent.grantUri(uri: Uri): Intent = apply {
     clipData = android.content.ClipData.newRawUri("rom", uri)
+}
+
+/**
+ * Доступ ко всей папке ROMs (чтение и запись): эмулятор создаёт сохранения и автосохранения рядом
+ * с игрой. Без этого GBA.emu пишет «Error opening ….sav, please verify save path has write access»,
+ * и сохранения в игре не записываются.
+ */
+private fun Intent.grantTree(tree: Uri?): Intent = apply {
+    if (tree == null) return@apply
+    val clip = clipData
+    if (clip == null) clipData = android.content.ClipData.newRawUri("roms", tree) else clip.addItem(android.content.ClipData.Item(tree))
+    addFlags(Intent.FLAG_GRANT_PREFIX_URI_PERMISSION)
 }
 
 object Launchers {
@@ -88,7 +102,7 @@ object Launchers {
      */
     private fun imagine(id: String, name: String, systems: Set<GameSystem>, vararg packages: String) = LaunchRecipe(
         id, name, systems, packages = packages.toList(), activities = listOf("com.imagine.BaseActivity"),
-    ) { c -> base(c, Intent.ACTION_VIEW).setData(c.uri).grantUri(c.uri) }
+    ) { c -> base(c, Intent.ACTION_VIEW).setData(c.uri).grantUri(c.uri).grantTree(c.tree) }
 
     val all: List<LaunchRecipe> = listOf(
         LaunchRecipe(
@@ -280,7 +294,7 @@ object Launchers {
                 addCategory(Intent.CATEGORY_DEFAULT)
                 if (withType) setDataAndType(c.uri, "application/octet-stream") else setData(c.uri)
                 putExtra(Intent.EXTRA_STREAM, c.uri)
-            }.grantUri(c.uri)
+            }.grantUri(c.uri).grantTree(c.tree)
         }
 
     /** Установленный пакет для рецепта, если он есть. */

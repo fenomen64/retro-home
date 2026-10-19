@@ -294,9 +294,14 @@ class LauncherController(
             runCatching { pm.getActivityInfo(ComponentName(pkg, cls), 0) }.isSuccess
         } ?: recipe.activities.first()
         val titles = listOfNotNull(data.titleOverrides[base.id], base.title, base.fileName.substringBeforeLast('.'))
-        val intent = recipe.build(LaunchContext(pkg, activity, games.documentUri(tree, game), game.path, game.system, base.titleId, titles))
+        val ctx = LaunchContext(pkg, activity, games.documentUri(tree, game), game.path, game.system, base.titleId, titles, Uri.parse(tree))
         try {
-            context.startActivity(intent)
+            try {
+                context.startActivity(recipe.build(ctx))
+            } catch (e: SecurityException) {
+                // Доступ ко всей папке выдать не удалось — запускаем только с самим файлом игры
+                context.startActivity(recipe.build(ctx.copy(tree = null)))
+            }
             if (recipe.id == "lemuroid" && com.retrohome.launcher.data.Lemuroid.idFor(titles) == null) {
                 // Lemuroid открылся на своём списке игр — подсказать, как запускать сразу
                 val home = com.retrohome.launcher.data.Lemuroid.canReceiveShortcuts(context)
