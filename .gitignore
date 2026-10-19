@@ -1,0 +1,23 @@
+# Gradle / Android Studio
+.gradle/
+.kotlin/
+build/
+captures/
+.idea/
+*.iml
+.DS_Store
+.externalNativeBuild/
+.cxx/
+
+# Local machine settings (SDK path)
+local.properties
+
+# Signing keys — never commit
+keystore/
+keystore.properties
+*.jks
+*.keystore
+
+# Build outputs
+*.apk
+*.aab
