@@ -1,5 +1,15 @@
 package com.retrohome.launcher
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.assertTextEquals
@@ -54,6 +64,32 @@ class UpdateTest {
         assertNull(UpdateCheck.parse(latest.replace("\"prerelease\":false", "\"prerelease\":true")))
     }
 
+    private fun rel(v: String, notes: String, draft: Boolean = false, pre: Boolean = false) = """
+        {"tag_name":"v$v","draft":$draft,"prerelease":$pre,"html_url":"https://github.com/fenomen64/retro-home/releases/tag/v$v",
+         "body":"$notes","assets":[{"name":"RetroHome-$v.apk","size":100,
+         "browser_download_url":"https://github.com/fenomen64/retro-home/releases/download/v$v/RetroHome-$v.apk"}]}
+    """.trimIndent()
+
+    // Список выпусков (GitHub отдаёт от новых к старым)
+    private val list = "[" + listOf(
+        rel("0.42", "- Бета", pre = true),
+        rel("0.41", "- **Сорок один:** раз.\n- Два."),
+        rel("0.40", "- Сорок."),
+        rel("0.39", "- Тридцать девять."),
+        rel("0.38", "- Тридцать восемь."),
+    ).joinToString(",") + "]"
+
+    @Test
+    fun collectsAllVersionsSinceInstalled() {
+        val r = UpdateCheck.parseList(list, current = "0.39")!!
+        assertEquals("0.41", r.version)
+        // Все версии новее установленной, от старой к новой; бета не попадает
+        assertEquals(listOf("0.40", "0.41"), r.changes.map { it.first })
+        assertEquals("- Сорок.", r.changes.first().second)
+        // Уже на новейшей — обновляться не на что
+        assertEquals(emptyList<String>(), UpdateCheck.parseList(list, current = "0.41")!!.history.map { it.first })
+    }
+
     @Test
     fun comparesVersionsAsNumbers() {
         assertTrue(UpdateCheck.isNewer("0.39", "0.38"))
@@ -103,6 +139,43 @@ class UpdateTest {
         compose.onRoot().captureRoboImage("build/screenshots/60_update_available.png")
         compose.onNodeWithText("Скачать и установить 0.39 · 24.4 МБ").performClick()
         compose.runOnIdle { assertEquals(listOf("0.39"), installed) }
+    }
+
+    @OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
+    @Test
+    @Config(qualifiers = "w768dp-h432dp-land-xhdpi")
+    fun updateScreenWorksWithButtonsAndListsEveryVersion() {
+        val r = UpdateCheck.parseList(list, current = "0.39")!!
+        val installed = mutableListOf<String>()
+        show {
+            // Как на приставке: управление кнопками
+            val im = androidx.compose.ui.platform.LocalInputModeManager.current
+            androidx.compose.runtime.LaunchedEffect(Unit) { im.requestInputMode(androidx.compose.ui.input.InputMode.Keyboard) }
+            androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) {
+                // Под экраном — главный экран со своими кнопками (в приложении он прикрыт и курсор не получает)
+                androidx.compose.foundation.layout.Box(
+                    androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.BottomCenter).testTag("under").focusable()
+                ) { androidx.compose.material3.Text("под низом") }
+                androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black)) {
+                    UpdateScreen(UpdateState.Available(r), "0.39", true, onBack = {}, onCheck = {},
+                        onInstall = { installed += it.version }, onPermission = {}, onOpenPage = {}, onToggleAuto = {})
+                }
+            }
+        }
+        compose.waitForIdle()
+        // Курсор сам встал на первую строку — «Скачать и установить»
+        compose.onNodeWithText("Скачать и установить 0.41 · 0.0 МБ").assertIsFocused()
+        compose.onRoot().performKeyInput { pressKey(androidx.compose.ui.input.key.Key.DirectionCenter) }
+        compose.runOnIdle { assertEquals(listOf("0.41"), installed) }
+        // Крестовина листает вниз, до списка изменений, и не уходит на экран под низом
+        repeat(12) { compose.onRoot().performKeyInput { pressKey(androidx.compose.ui.input.key.Key.DirectionDown) }; compose.waitForIdle() }
+        compose.onNodeWithTag("under").assertIsNotFocused()
+        compose.onNodeWithText("• Два.").assertIsFocused()
+        // Описания всех версий новее установленной, от старой к новой
+        compose.onNodeWithTag("notes:0.40", useUnmergedTree = true).assertTextEquals("Версия 0.40")
+        compose.onNodeWithTag("notes:0.41", useUnmergedTree = true).assertTextEquals("Версия 0.41")
+        compose.onAllNodesWithText("Версия 0.39").assertCountEquals(0)
+        compose.onRoot().captureRoboImage("build/screenshots/62_update_versions.png")
     }
 
     @Test

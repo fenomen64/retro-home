@@ -30,7 +30,8 @@ import java.security.MessageDigest
  */
 object UpdateCheck {
     const val REPO = "fenomen64/retro-home"
-    const val LATEST_URL = "https://api.github.com/repos/$REPO/releases/latest"
+    /** Последние выпуски одним запросом: из них — новейший и описания всех версий новее установленной. */
+    const val LIST_URL = "https://api.github.com/repos/$REPO/releases?per_page=40"
     const val RELEASES_PAGE = "https://github.com/$REPO/releases/latest"
 
     /**
@@ -45,11 +46,33 @@ object UpdateCheck {
         val size: Long,
         val notes: String,
         val page: String,
-    )
+        /** Все версии новее установленной, от старой к новой: версия → что в ней нового. */
+        val history: List<Pair<String, String>> = emptyList(),
+    ) {
+        /** Что нового — по версиям; если списка нет, то хотя бы о последней. */
+        val changes: List<Pair<String, String>> get() = history.ifEmpty { listOf(version to notes) }
+    }
 
-    /** Ответ GitHub о последнем релизе → версия и ссылка на APK (null — в релизе нет APK). */
-    fun parse(json: String): Release? {
-        val o = JSONObject(json)
+    /** Один выпуск GitHub → версия и ссылка на APK (null — в выпуске нет APK). */
+    fun parse(json: String): Release? = parse(JSONObject(json))
+
+    /**
+     * Список выпусков GitHub → новейший выпуск с APK; в history — все версии новее current
+     * (до новейшей включительно), от старой к новой.
+     */
+    fun parseList(json: String, current: String): Release? {
+        val arr = org.json.JSONArray(json)
+        val all = (0 until arr.length()).mapNotNull { runCatching { parse(arr.getJSONObject(it)) }.getOrNull() }
+        val latest = all.maxWithOrNull { a, b -> compare(a.version, b.version) } ?: return null
+        val history = all
+            .filter { isNewer(it.version, current) && compare(it.version, latest.version) <= 0 }
+            .distinctBy { it.version }
+            .sortedWith { a, b -> compare(a.version, b.version) }
+            .map { it.version to it.notes }
+        return latest.copy(history = history)
+    }
+
+    private fun parse(o: JSONObject): Release? {
         if (o.optBoolean("draft") || o.optBoolean("prerelease")) return null
         val version = o.optString("tag_name").removePrefix("v").trim()
         if (version.isEmpty()) return null
@@ -70,16 +93,18 @@ object UpdateCheck {
     }
 
     /** remote новее current? Сравнение по числам: 0.10 новее 0.9, 0.38.1 новее 0.38. */
-    fun isNewer(remote: String, current: String): Boolean {
+    fun isNewer(remote: String, current: String): Boolean = compare(remote, current) > 0
+
+    fun compare(x: String, y: String): Int {
         fun parts(v: String) = v.removePrefix("v").split('.', '-').map { it.takeWhile(Char::isDigit).toIntOrNull() ?: 0 }
-        val r = parts(remote)
-        val c = parts(current)
+        val r = parts(x)
+        val c = parts(y)
         for (i in 0 until maxOf(r.size, c.size)) {
             val a = r.getOrElse(i) { 0 }
             val b = c.getOrElse(i) { 0 }
-            if (a != b) return a > b
+            if (a != b) return a.compareTo(b)
         }
-        return false
+        return 0
     }
 
     /** Заметки к релизу без разметки Markdown — для показа на экране. */
@@ -123,15 +148,26 @@ class Updater(private val context: Context, private val scope: CoroutineScope) {
         if (_state.value == UpdateState.Idle) File(context.cacheDir, "update").deleteRecursively()
     }
 
-    private fun remember(r: UpdateCheck.Release) = prefs.edit()
-        .putString("known.version", r.version).putString("known.url", r.apkUrl).putLong("known.size", r.size)
-        .putString("known.notes", r.notes).putString("known.page", r.page).apply()
+    private fun remember(r: UpdateCheck.Release) {
+        val history = org.json.JSONArray()
+        r.history.forEach { (v, n) -> history.put(org.json.JSONArray().put(v).put(n)) }
+        prefs.edit()
+            .putString("known.version", r.version).putString("known.url", r.apkUrl).putLong("known.size", r.size)
+            .putString("known.notes", r.notes).putString("known.page", r.page).putString("known.history", history.toString())
+            .apply()
+    }
 
     private fun restoreKnown(): UpdateCheck.Release? {
         val v = prefs.getString("known.version", null) ?: return null
         val url = prefs.getString("known.url", null) ?: return null
+        val history = runCatching {
+            val a = org.json.JSONArray(prefs.getString("known.history", "[]"))
+            (0 until a.length()).map { a.getJSONArray(it).let { p -> p.getString(0) to p.getString(1) } }
+        }.getOrDefault(emptyList())
+            // Часть этих версий могла уже стоять — показываем только то, что новее установленной
+            .filter { UpdateCheck.isNewer(it.first, currentVersion) }
         return UpdateCheck.Release(v, url, prefs.getLong("known.size", 0L), prefs.getString("known.notes", "").orEmpty(),
-            prefs.getString("known.page", UpdateCheck.RELEASES_PAGE).orEmpty())
+            prefs.getString("known.page", UpdateCheck.RELEASES_PAGE).orEmpty(), history)
     }
 
     /** Новая версия, о которой уже известно (для меню и строки настроек). */
@@ -187,12 +223,12 @@ class Updater(private val context: Context, private val scope: CoroutineScope) {
     }
 
     private fun fetchLatest(): UpdateState = try {
-        val c = open(UpdateCheck.LATEST_URL)
+        val c = open(UpdateCheck.LIST_URL)
         c.setRequestProperty("Accept", "application/vnd.github+json")
         when (val code = c.responseCode) {
             200 -> {
                 val body = c.inputStream.bufferedReader().use { it.readText() }
-                val r = UpdateCheck.parse(body)
+                val r = UpdateCheck.parseList(body, currentVersion)
                 when {
                     r == null -> UpdateState.Failed(UpdateState.Reason.NO_APK)
                     UpdateCheck.isNewer(r.version, currentVersion) -> UpdateState.Available(r)

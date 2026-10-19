@@ -99,6 +99,15 @@ fun ScreenFrame(title: String, onBack: () -> Unit, content: @Composable () -> Un
             Text(title, color = Palette.text, fontSize = 20.sp, fontWeight = FontWeight.Bold)
         }
         val navKeys = remember { NavKeys() }
+        // Курсор сразу на экране: если сам экран его не поставил — на первую строку.
+        // Иначе крестовина «не работает», пока не коснёшься экрана пальцем
+        val group = remember { FocusRequester() }
+        var inside by remember { mutableStateOf(false) }
+        LaunchedEffect(Unit) {
+            androidx.compose.runtime.withFrameNanos { }
+            androidx.compose.runtime.withFrameNanos { }
+            if (!inside) runCatching { group.requestFocus() }
+        }
         Box(
             Modifier
                 .weight(1f)
@@ -109,6 +118,8 @@ fun ScreenFrame(title: String, onBack: () -> Unit, content: @Composable () -> Un
                 }
                 // Курсор не уходит за края списка: ни на кнопку «‹» в заголовке, ни на экран под этим
                 // (главный экран остаётся под настройками) — у первой и последней строки он упирается
+                .focusRequester(group)
+                .onFocusChanged { inside = it.hasFocus }
                 .focusProperties { onExit = { cancelFocusChange() } }
                 .focusGroup()
         ) {
@@ -1084,14 +1095,25 @@ fun UpdateScreen(
             }
             item { ChoiceRow(u.auto, if (autoCheck) s.on else s.off, desc = u.autoDesc, id = "auto") { onToggleAuto() } }
             item { FocusRow(onClick = { onOpenPage(release) }, id = "page") { TitleAndDesc(u.openPage, u.openPageDesc) } }
-            val notes = release?.notes?.let { com.retrohome.launcher.data.UpdateCheck.plainNotes(it) }.orEmpty()
-            if (notes.isNotEmpty()) {
-                item { Text(u.whatsNew, color = Palette.dim, fontSize = 13.sp, modifier = Modifier.padding(start = 24.dp, top = 12.dp, bottom = 4.dp)) }
-                // Каждый пункт — отдельная строка: крестовина листает по ним
-                val parts = notes.split(Regex("\n(?=• )")).filter { it.isNotBlank() }
-                items(parts.size) { i ->
-                    FocusRow(onClick = {}) {
-                        Text(parts[i].trim(), color = Palette.text, fontSize = 13.sp, lineHeight = 18.sp)
+            // Что нового во всех версиях между установленной и новейшей, от старой к новой
+            val changes = release?.changes.orEmpty()
+                .map { (v, n) -> v to com.retrohome.launcher.data.UpdateCheck.plainNotes(n) }
+                .filter { it.second.isNotBlank() }
+            if (changes.isNotEmpty()) {
+                item { Text(u.whatsNew, color = Palette.dim, fontSize = 13.sp, modifier = Modifier.padding(start = 24.dp, top = 12.dp, bottom = 2.dp)) }
+                changes.forEach { (v, notes) ->
+                    item(key = "v:$v") {
+                        Text(
+                            u.versionTitle.format(v), color = Palette.accent, fontSize = 16.sp, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(start = 24.dp, top = 10.dp, bottom = 2.dp).testTag("notes:$v"),
+                        )
+                    }
+                    // Каждый пункт — отдельная строка: крестовина листает по ним
+                    val parts = notes.split(Regex("\n(?=• )")).filter { it.isNotBlank() }
+                    items(parts.size, key = { "v:$v:$it" }) { i ->
+                        FocusRow(onClick = {}) {
+                            Text(parts[i].trim(), color = Palette.text, fontSize = 13.sp, lineHeight = 18.sp)
+                        }
                     }
                 }
             }

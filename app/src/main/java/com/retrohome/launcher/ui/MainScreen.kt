@@ -28,6 +28,8 @@ import com.retrohome.launcher.ui.phone.PhoneState
 import kotlinx.coroutines.flow.Flow
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.foundation.focusGroup
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.retrohome.launcher.data.GameSystem
@@ -247,6 +249,14 @@ fun MainScreen(
     }
 
     Box(Modifier.fillMaxSize()) {
+        // Главный экран под открытым экраном (настройки и т. п.) курсор не получает:
+        // крестовина всегда управляет тем, что на виду
+        Box(
+            Modifier
+                .fillMaxSize()
+                .focusProperties { onEnter = { if (stack.isNotEmpty()) cancelFocusChange() } }
+                .focusGroup()
+        ) {
         if (console) {
             val tabs = remember(apps, data, s, gamesInfo) { buildConsoleTabs(apps, data, s, gamesInfo) }
             ConsoleHome(
@@ -284,6 +294,7 @@ fun MainScreen(
                 actions = phoneActions,
                 gestures = data.settings.gestures,
             )
+        }
         }
 
         // Звуки навигации на экранах-списках — в консольном режиме, как и везде в нём

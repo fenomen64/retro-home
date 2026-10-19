@@ -564,6 +564,7 @@ val RU = Strings(
             menuItem = "Обновить до %s",
             toast = "Retro Home: доступна версия %s — Настройки → Обновление",
             mb = "МБ",
+            versionTitle = "Версия %s",
         ),
         menu = MenuStrings(
             general = "Язык, режим, кнопки A/B, масштаб, главный экран",
@@ -941,6 +942,7 @@ val EN = Strings(
             menuItem = "Update to %s",
             toast = "Retro Home: version %s is available — Settings → Update",
             mb = "MB",
+            versionTitle = "Version %s",
         ),
         menu = MenuStrings(
             general = "Language, mode, A/B buttons, scale, home screen",
@@ -1129,6 +1131,7 @@ data class UpdateStrings(
     val menuItem: String,
     val toast: String,
     val mb: String,
+    val versionTitle: String,
 ) {
     fun sizeMb(bytes: Long) = if (bytes <= 0) "" else " · %.1f %s".format(java.util.Locale.ROOT, bytes / 1048576.0, mb)
 }
