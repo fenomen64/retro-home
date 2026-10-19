@@ -36,6 +36,7 @@ const val FOLDER_IGNORE = "IGNORE"
 object Scanner {
     private const val MAX_DEPTH = 2
     private val switchTitleId = Regex("(?i)\\b01[0-9a-f]{14}\\b")
+    private val extraTrack = Regex("(?i)track\\s*0*([2-9]|[1-9]\\d+)")
 
     fun scan(src: FileSource, overrides: Map<String, String>, now: Long = System.currentTimeMillis()): ScanResult {
         val root = src.root() ?: return ScanResult(time = now)
@@ -79,6 +80,8 @@ object Scanner {
                 if (tid != null && !tid.endsWith("000")) continue
             }
             val p = TitleParser.full(f.name)
+            // Образ из нескольких дорожек без .cue: игра — первая дорожка, остальные (музыка) пропускаем
+            if (GameFiles.extension(f.name) == "bin" && p.tags.any { extraTrack.matches(it.trim()) }) continue
             val titleId = if (system == GameSystem.VITA) VitaGames.titleId(f.name, if (GameFiles.extension(f.name) == "psvita") src.readText(f, 256) else null) else null
             val g = Game(f.id, src.pathOf(f), system, p.title, p.tags, folder, titleId = titleId)
             if (p.disc != null) discGroups.getOrPut(p.title.lowercase()) { ArrayList() } += g to p.disc

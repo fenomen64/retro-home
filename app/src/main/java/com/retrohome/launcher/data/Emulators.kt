@@ -83,6 +83,7 @@ object Emulators {
         EmulatorDef("dolphin", "Dolphin", listOf(GameSystem.GC, GameSystem.WII), listOf("org.dolphinemu."), listOf("dolphin")),
         EmulatorDef("cemu", "Cemu", listOf(GameSystem.WIIU), listOf("info.cemu."), listOf("cemu")),
         EmulatorDef("vita3k", "Vita3K", listOf(GameSystem.VITA), listOf("org.vita3k.", "org.vita3kplus."), listOf("vita3k")),
+        EmulatorDef("emucorev", "EmuCoreV", listOf(GameSystem.VITA), listOf("com.sbro.emucorev"), listOf("emucorev")),
         EmulatorDef("ps3", "aPS3e / RPCSX", listOf(GameSystem.PS3), emptyList(), listOf("aps3e", "rpcsx", "rpcs3")),
         EmulatorDef("flycast", "Flycast", listOf(GameSystem.DC), listOf("com.flycast."), listOf("flycast")),
         EmulatorDef("redream", "Redream", listOf(GameSystem.DC), listOf("io.recompiled.redream"), listOf("redream")),

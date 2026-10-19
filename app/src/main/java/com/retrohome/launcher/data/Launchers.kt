@@ -239,6 +239,29 @@ object Launchers {
             }
         },
         LaunchRecipe(
+            // EmuCoreV (на ядре Vita3K): своя команда запуска, номер игры — в titleId и «-r»
+            "emucorev", "EmuCoreV", setOf(GameSystem.VITA),
+            packagePrefix = "com.sbro.emucorev",
+            activities = listOf("com.sbro.emucorev.core.vita.Emulator"),
+        ) { c ->
+            val id = c.gameId
+            if (id != null) {
+                Intent("com.sbro.emucorev.action.LAUNCH").apply {
+                    setClassName(c.pkg, c.activity)
+                    addCategory(Intent.CATEGORY_DEFAULT)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    putExtra("titleId", id)
+                    putExtra("AppStartParameters", arrayOf("-r", id))
+                }
+            } else {
+                Intent(Intent.ACTION_MAIN).apply {
+                    addCategory(Intent.CATEGORY_LAUNCHER)
+                    setClassName(c.pkg, EMUCOREV_MAIN)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+                }
+            }
+        },
+        LaunchRecipe(
             "retroarch", "RetroArch", retroArchCores.keys,
             packages = listOf("com.retroarch.aarch64", "com.retroarch", "com.retroarch.ra32"),
             activities = listOf("com.retroarch.browser.retroactivity.RetroActivityFuture"),
@@ -277,6 +300,7 @@ object Launchers {
     )
 
     const val VITA3K_MAIN = "org.vita3k.emulator.MainActivity"
+    const val EMUCOREV_MAIN = "com.sbro.emucorev.MainActivity"
 
     fun byId(id: String) = all.firstOrNull { it.id == id }
 

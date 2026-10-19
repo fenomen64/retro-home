@@ -308,7 +308,7 @@ class LauncherController(
                 toast(if (home) strings.emu.lemuroidHint else strings.emu.lemuroidHintNotHome)
             }
             // Vita3K открылся на своём списке: номер игры не нашёлся
-            if (recipe.id == "vita3k" && base.titleId == null) toast(strings.emu.vitaNoId)
+            if (game.system == GameSystem.VITA && base.titleId == null) toast(strings.emu.vitaNoId)
             recordRecent(key)
             // Время в игре: точно по статистике Android, если есть доступ, иначе — до возврата в лаунчер
             settleSession()

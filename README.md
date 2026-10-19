@@ -44,7 +44,7 @@
 3. В консольном режиме: **START → Папка ROMs**, выберите папку с играми (вложенные папки вида `psx`, `ps2`, `gba`… распознаются автоматически).
 
 Особые случаи:
-- **PS Vita (Vita3K):** игры запускаются по номеру вида `PCSE00120`. Подойдут заглушки ES-DE — файлы `.psvita` с номером внутри — или номер в имени файла: `Игра [PCSE00120].vpk`.
+- **PS Vita (Vita3K, EmuCoreV):** игры запускаются по номеру вида `PCSE00120`. Подойдут заглушки ES-DE — файлы `.psvita` с номером внутри — или номер в имени файла: `Игра [PCSE00120].vpk`.
 - **Lemuroid** открывает игры только из своей библиотеки. Чтобы запускать игру сразу, создайте в Lemuroid её ярлык (удерживайте игру → «Создать ярлык»), когда Retro Home — главный экран.
 
 Необязательные настройки (**START → Настройки**):
@@ -106,7 +106,7 @@ cd retro-home
 Built for the Retroid Pocket G2, but it works on any device with Android 10+: other handhelds (AYN Odin, Anbernic, Retroid Pocket 4/5/Mini…), tablets and phones with a controller.
 
 ### Features
-- **Console mode:** tabs per system built automatically from your ROMs folder; one-button launch in the right emulator (RetroArch, DuckStation, ARMSX2, NetherSX2/AetherSX2, PPSSPP, Dolphin, Citra/Azahar, Eden/Yuzu, melonDS, DraStic, Flycast, Redream, Lemuroid, Vita3K, ScummVM and more; unknown emulators are detected automatically by name and file support); box art and in-game snaps from libretro-thumbnails; descriptions, genre, developer and year from Wikipedia/Wikidata (in Russian and English, matched to the right console); a game page with playtime and disc selection; **RetroAchievements** progress and full achievement lists; the last-played game and favorites on the home tab; console-styled button glyphs, haptics, UI sounds and music; 4 themes and 8 accent colors.
+- **Console mode:** tabs per system built automatically from your ROMs folder; one-button launch in the right emulator (RetroArch, DuckStation, ARMSX2, NetherSX2/AetherSX2, PPSSPP, Dolphin, Citra/Azahar, Eden/Yuzu, melonDS, DraStic, Flycast, Redream, Lemuroid, Vita3K, ScummVM, Vita3K, EmuCoreV and more; unknown emulators are detected automatically by name and file support); box art and in-game snaps from libretro-thumbnails; descriptions, genre, developer and year from Wikipedia/Wikidata (in Russian and English, matched to the right console); a game page with playtime and disc selection; **RetroAchievements** progress and full achievement lists; the last-played game and favorites on the home tab; console-styled button glyphs, haptics, UI sounds and music; 4 themes and 8 accent colors.
 - **Phone mode:** home screen with folders and dock, app drawer with search, Android widgets, gestures, icon packs.
 - The UI is available in Russian and English.
 

@@ -393,10 +393,21 @@ class MetaRepository(
     private fun loadIndex(system: GameSystem): Thumbnails.Index? {
         indexes[system]?.let { return it }
         val file = File(indexDir, system.name + ".txt")
-        val fresh = file.exists() && System.currentTimeMillis() - file.lastModified() < 7L * 24 * 3600 * 1000
-        val names = if (fresh) file.readLines() else {
-            val html = Thumbnails.indexUrl(system)?.let { get(it) } ?: return null
-            Thumbnails.parseIndex(html).also { file.writeText(it.joinToString("\n")) }
+        // Пустой список (ответ испорчен фильтром, VPN или страницей-заглушкой) не запоминаем
+        val fresh = file.exists() && file.length() > 0 && System.currentTimeMillis() - file.lastModified() < 7L * 24 * 3600 * 1000
+        val names = if (fresh) file.readLines().filter { it.isNotBlank() } else {
+            val url = Thumbnails.indexUrl(system) ?: return null
+            val html = get(url) ?: return null
+            val parsed = Thumbnails.parseIndex(html)
+            if (parsed.isEmpty()) {
+                // Сайт ответил, но вместо списка обложек — что-то другое: это сбой, а не «обложки нет»
+                netErrors.set(errorsHere() + 1)
+                val problem = "${runCatching { URL(url).host }.getOrDefault("?")}: вместо списка обложек пришла другая страница"
+                if (lastProblem.get() == null) lastProblem.set(problem)
+                _problem.value = problem
+                return null
+            }
+            parsed.also { file.writeText(it.joinToString("\n")) }
         }
         return Thumbnails.Index(names).also { indexes[system] = it }
     }
@@ -745,7 +756,7 @@ class MetaRepository(
     }
 
     companion object {
-        const val VERSION = "0.27.2"
+        const val VERSION = "0.28"
         /** Страница проекта — контакт в подписи запросов (Issues для связи). */
         const val PROJECT_URL = "https://github.com/fenomen64/retro-home"
         const val USER_AGENT = "RetroHome/$VERSION (personal Android game launcher)"

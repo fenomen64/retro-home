@@ -91,7 +91,8 @@ object GameFiles {
         GameSystem.GBA to setOf("gba") + retroArchive,
         GameSystem.NDS to setOf("nds", "dsi") + retroArchive,
         GameSystem.N3DS to setOf("3ds", "cci", "cia", "cxi", "3dsx", "app", "z3dsx", "zcci", "zcxi"),
-        GameSystem.PS1 to disc + setOf("exe"),
+        // .bin без .cue — тоже игра (дорожки, перечисленные в .cue, скрываются)
+        GameSystem.PS1 to disc + setOf("exe", "bin"),
         GameSystem.PS2 to setOf("iso", "chd", "cso", "zso", "gz", "mdf", "nrg", "img", "cue", "elf"),
         GameSystem.PS3 to setOf("iso"),
         GameSystem.PSP to setOf("iso", "cso", "chd", "pbp", "elf", "zso"),

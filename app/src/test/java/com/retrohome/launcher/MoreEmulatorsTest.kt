@@ -35,6 +35,13 @@ class MoreEmulatorsLogicTest {
         assertEquals("saturnemu", Emulators.match("com.explusalpha.SaturnEmu", "Saturn.emu")!!.id)
     }
 
+    @Test fun emuCoreVIsAVitaEmulator() {
+        assertEquals("emucorev", Emulators.match("com.sbro.emucorev", "EmuCoreV")!!.id)
+        assertEquals(listOf(GameSystem.VITA), Emulators.match("com.sbro.emucorev", "EmuCoreV")!!.systems)
+        assertEquals(listOf("vita3k", "emucorev"), Launchers.available(GameSystem.VITA, setOf("org.vita3k.emulator", "com.sbro.emucorev")).map { it.id })
+        assertEquals("emucorev", Launchers.choose(GameSystem.VITA, setOf("com.sbro.emucorev"), null)!!.id)
+    }
+
     @Test fun mdEmuLaunchesMegaDriveDirectly() {
         assertEquals(listOf("mdemu"), Launchers.available(GameSystem.MD, setOf("com.explusalpha.MdEmu")).map { it.id })
         assertEquals(listOf("mdemu"), Launchers.available(GameSystem.GG, setOf("com.explusalpha.MdEmu")).map { it.id })
@@ -132,6 +139,17 @@ class MoreEmulatorsIntentTest {
         val open = r.build(LaunchContext("org.vita3k.emulator", "org.vita3k.emulator.Emulator", uri, "/x", GameSystem.VITA))
         assertEquals(Launchers.VITA3K_MAIN, open.component!!.className)
         assertNull(open.getStringArrayExtra("AppStartParameters"))
+    }
+
+    @Test fun emuCoreVGetsTitleId() {
+        val r = Launchers.byId("emucorev")!!
+        val i = r.build(LaunchContext("com.sbro.emucorev", "com.sbro.emucorev.core.vita.Emulator", uri, "/x", GameSystem.VITA, gameId = "PCSE00120"))
+        assertEquals("com.sbro.emucorev.action.LAUNCH", i.action)
+        assertEquals("com.sbro.emucorev.core.vita.Emulator", i.component!!.className)
+        assertEquals("PCSE00120", i.getStringExtra("titleId"))
+        assertArrayEquals(arrayOf("-r", "PCSE00120"), i.getStringArrayExtra("AppStartParameters"))
+        val open = r.build(LaunchContext("com.sbro.emucorev", "com.sbro.emucorev.core.vita.Emulator", uri, "/x", GameSystem.VITA))
+        assertEquals(Launchers.EMUCOREV_MAIN, open.component!!.className)
     }
 
     @Test fun lemuroidUsesShortcutNumberOrOpensLibrary() {
