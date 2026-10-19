@@ -121,6 +121,10 @@ fun MainScreen(
 
     fun pop() {
         if (stack.isNotEmpty()) stack.removeAt(stack.lastIndex)
+        // Экран открывали из меню START — возвращаемся в него, на тот же пункт
+        if (stack.isEmpty()) {
+            if (console) consoleState.screenClosed() else consoleState.startReturn = null
+        }
     }
 
     // Пробный звук при смене набора — чтобы сразу услышать выбранный вариант
@@ -392,7 +396,8 @@ fun MainScreen(
                     } else emptyList()
                     gameItems + appItems
                 }
-                SearchScreen(pool, ::pop) { key -> pop(); controller.launch(key) }
+                // Запуск из поиска — сразу к игре, без возврата в меню
+                SearchScreen(pool, ::pop) { key -> consoleState.startReturn = null; pop(); controller.launch(key) }
             }
             Screen.TITLE_EDIT -> {
                 val g = editingKey?.let { controller.gameByKey(it) }

@@ -154,6 +154,11 @@ class ConsoleState {
     var achList by mutableStateOf(androidx.compose.foundation.lazy.LazyListState())
     /** В панели достижений — только ещё не открытые. */
     var achLockedOnly by mutableStateOf(false)
+    /**
+     * Экран (настройки, поиск…) открыт из меню START — пункт, с которого открыли.
+     * Закрыли экран — снова меню START, курсор на том же пункте.
+     */
+    var startReturn: Int? = null
 
     fun openPage(key: String) {
         page = key
@@ -180,8 +185,17 @@ class ConsoleState {
     }
 
     /** Нажатие Home: закрыть всё лишнее. keepPage — вернулись из игры: страница игры остаётся. */
+    /** Закрылся последний экран лаунчера: если его открыли из меню START — снова меню, курсор на том же пункте. */
+    fun screenClosed() {
+        val back = startReturn ?: return
+        startReturn = null
+        menuIndex = back
+        overlay = ConsoleOverlay.Start
+    }
+
     fun reset(keepPage: Boolean = false) {
         overlay = null
+        startReturn = null
         if (!keepPage) page = null
     }
 }
@@ -192,6 +206,8 @@ data class MenuEntry(
     val closeAfter: Boolean = true,
     /** Для переключателей: шаг назад (-1) или вперёд (1) — кнопками влево/вправо и стрелками ‹ ›. */
     val step: ((Int) -> Unit)? = null,
+    /** Открывает экран лаунчера; закрыли его — снова это меню. */
+    val returnsHere: Boolean = false,
     val action: () -> Unit,
 )
 
@@ -206,8 +222,8 @@ fun startMenu(
     /** Вышла новая версия лаунчера — первым пунктом предлагаем обновиться. */
     update: String? = null,
 ): List<MenuEntry> = listOfNotNull(
-    update?.let { v -> MenuEntry(s.ext.upd.menuItem.format(v)) { a.openUpdate() } },
-    MenuEntry(s.search) { a.openSearch() },
+    update?.let { v -> MenuEntry(s.ext.upd.menuItem.format(v), returnsHere = true) { a.openUpdate() } },
+    MenuEntry(s.search, returnsHere = true) { a.openSearch() },
     choiceEntry(s.sortGames, s.sortName(gameSort)) { a.cycleSortGames(it) },
     choiceEntry(s.sounds, s.packName(audio.sfxPack)) { a.cycleSfx(it) },
     choiceEntry(s.music, s.trackName(audio.music)) { a.cycleMusic(it) },
@@ -223,8 +239,8 @@ fun startMenu(
             ModeOverride.PHONE -> s.modePhone
         },
     ) { a.cycleMode(it) },
-    MenuEntry(s.consoleApps) { a.openConsoleApps() },
-    MenuEntry(s.settings) { a.openSettings() },
+    MenuEntry(s.consoleApps, returnsHere = true) { a.openConsoleApps() },
+    MenuEntry(s.settings, returnsHere = true) { a.openSettings() },
     MenuEntry(s.wifi) { a.openWifi() },
     MenuEntry(s.bluetooth) { a.openBluetooth() },
     MenuEntry(s.androidSettings) { a.openAndroidSettings() },
@@ -325,6 +341,7 @@ fun ConsoleHome(
     fun runMenu(i: Int) {
         val items = menuItems()
         val m = items.getOrNull(i) ?: return
+        state.startReturn = if (state.overlay == ConsoleOverlay.Start && m.returnsHere) i else null
         if (m.closeAfter) state.overlay = null
         m.action()
     }

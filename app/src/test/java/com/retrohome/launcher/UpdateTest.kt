@@ -122,6 +122,37 @@ class UpdateTest {
         assertTrue(startMenu(RU, ModeOverride.AUTO, a).none { it.title.startsWith("Обновить до") })
     }
 
+    @Test
+    @Config(qualifiers = "w768dp-h432dp-land-xhdpi")
+    fun closingSettingsReturnsToStartMenu() {
+        val pads = com.retrohome.launcher.ui.PadRegistry()
+        val state = com.retrohome.launcher.ui.console.ConsoleState()
+        val actions = RecordingConsoleActions()
+        compose.setContent {
+            CompositionLocalProvider(LocalStrings provides RU, com.retrohome.launcher.ui.LocalPadRegistry provides pads) {
+                com.retrohome.launcher.ui.console.ConsoleHome(com.retrohome.launcher.ui.console.buildConsoleTabs(emptyList(), com.retrohome.launcher.data.LauncherData(), RU, com.retrohome.launcher.ui.console.GamesInfo(hasFolder = true)), state, ModeOverride.AUTO, false, actions)
+            }
+        }
+        val settingsAt = startMenu(RU, ModeOverride.AUTO, actions).indexOfFirst { it.title == RU.settings }
+        compose.runOnIdle { pads.dispatch(com.retrohome.launcher.ui.Pad.START) }
+        compose.runOnIdle { repeat(settingsAt) { pads.dispatch(com.retrohome.launcher.ui.Pad.DOWN) } }
+        compose.runOnIdle { pads.dispatch(com.retrohome.launcher.ui.Pad.CONFIRM) }
+        compose.runOnIdle {
+            assertEquals("settings", actions.log.last())
+            assertNull(state.overlay)
+        }
+        // Настройки закрыли — снова меню START, курсор на «Настройках»
+        compose.runOnIdle { state.screenClosed() }
+        compose.runOnIdle {
+            assertEquals(com.retrohome.launcher.ui.console.ConsoleOverlay.Start, state.overlay)
+            assertEquals(settingsAt, state.menuIndex)
+        }
+        // Пункт, который не открывает экран лаунчера (например, «Обновить данные»), — меню не возвращается
+        val refreshAt = startMenu(RU, ModeOverride.AUTO, actions).indexOfFirst { it.title == RU.updateMeta }
+        compose.runOnIdle { state.menuIndex = refreshAt; pads.dispatch(com.retrohome.launcher.ui.Pad.CONFIRM) }
+        compose.runOnIdle { state.screenClosed(); assertNull(state.overlay) }
+    }
+
     private fun show(content: @Composable () -> Unit) = compose.setContent {
         CompositionLocalProvider(LocalStrings provides RU) { content() }
     }
