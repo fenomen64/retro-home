@@ -107,6 +107,34 @@ class SwitchMirrorTest {
         assertTrue(DiagLog.snapshot().joinToString("\n"), DiagLog.snapshot().any { "Список игр Switch: tinfoil недоступен, взят сохранённый (1)" in it })
     }
 
+    /** Как у пользователя: tinfoil зависает или отвечает 500 — не ждём его для каждой игры, берём из Nlib. */
+    @Test fun hangingTinfoilIsSkippedAfterFirstFailure() {
+        val ids = listOf("0100A83022A22000", "0100BA4026E94000", "0100DC0018CD6000", "010004E01523C000", "0100D9B00E22C000", "01009D6022DC2000")
+        val games = ids.mapIndexed { i, id -> Game("g$i", "/ROMs/switch/Game $i [$id][v0].nsp", GameSystem.SWITCH, "Game $i", emptyList(), "switch") }
+        val r = repo { url ->
+            when {
+                "tinfoil.media" in url -> HttpResponse(0, error = "java.net.SocketTimeoutException: timeout")
+                url.startsWith("https://api.nlib.cc/nx/") && "/icon" in url -> HttpResponse(200, jpg)
+                url.startsWith("https://api.nlib.cc/nx/") && "?" in url -> {
+                    val id = url.substringAfter("/nx/").substringBefore("?")
+                    HttpResponse(200, """{"id":"$id","name":"Game $id","description":"About $id"}""".toByteArray())
+                }
+                "wikipedia.org" in url && "list=search" in url -> HttpResponse(200, """{"query":{"search":[]}}""".toByteArray())
+                "wbsearchentities" in url -> HttpResponse(200, """{"search":[]}""".toByteArray())
+                else -> HttpResponse(404)
+            }
+        }
+        r.fetch(games)
+        val end = System.currentTimeMillis() + 30_000
+        while (System.currentTimeMillis() < end && (r.running || games.any { r.meta.value[it.id]?.ver != META_VERSION })) Thread.sleep(50)
+        val m = r.meta.value
+        assertTrue(games.all { m[it.id]?.cover != null })
+        assertTrue(games.all { m[it.id]?.descEn?.startsWith("About") == true })
+        // tinfoil пробовали лишь в начале (несколько игр грузятся параллельно), а не для каждой из шести
+        assertTrue(calls.count { "tinfoil.media" in it }.toString(), calls.count { "tinfoil.media" in it } <= 8)
+        assertTrue(DiagLog.snapshot().any { "беру данные Switch из запасного источника" in it })
+    }
+
     @Test fun nlibParsing() {
         val p = SwitchDb.parseNlib(nlib)!!
         assertEquals("The Legend of Zelda: Tears of the Kingdom", p.name)

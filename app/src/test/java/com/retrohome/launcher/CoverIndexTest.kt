@@ -81,11 +81,23 @@ class CoverIndexTest {
         assertNotNull(second.cover)
     }
 
+    @Test fun biosNames() {
+        assertTrue(Scanner.isBios("SCPH1001.bin"))
+        assertTrue(Scanner.isBios("scph-5501.bin"))
+        assertTrue(Scanner.isBios("ps2-0230a-20080220.bin"))
+        assertTrue(Scanner.isBios("gba_bios.bin"))
+        assertTrue(!Scanner.isBios("BioShock.iso"))
+        assertTrue(!Scanner.isBios("Crash Bandicoot (USA).bin"))
+    }
+
     @Test fun ps1BinWithoutCueIsAGame() {
         val root = kotlin.io.path.createTempDirectory("roms").toFile()
         try {
             val dir = File(root, "psx").apply { mkdirs() }
             File(dir, "Crash Bandicoot (USA).bin").writeText("x")
+            // BIOS — не игры
+            File(dir, "SCPH1001.bin").writeText("x")
+            File(dir, "PSX BIOS (USA).bin").writeText("x")
             // Несколько дорожек без .cue — одна игра
             File(dir, "Tekken 3 (USA) (Track 1).bin").writeText("x")
             File(dir, "Tekken 3 (USA) (Track 2).bin").writeText("x")

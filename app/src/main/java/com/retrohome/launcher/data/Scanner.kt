@@ -36,6 +36,9 @@ const val FOLDER_IGNORE = "IGNORE"
 object Scanner {
     private const val MAX_DEPTH = 2
     private val switchTitleId = Regex("(?i)\\b01[0-9a-f]{14}\\b")
+    /** Файлы BIOS (SCPH1001.bin, «PSX BIOS.bin», ps2-0230a-20080220.bin…) — не игры. */
+    private val biosRe = Regex("(?i)^(scph[-_ ]?\\d{3,5}|ps[12x]?[-_ ]?\\d{4}[a-z]?-\\d{8})|(?<![a-z0-9])bios(?![a-z0-9])")
+    fun isBios(fileName: String) = biosRe.containsMatchIn(fileName)
     private val extraTrack = Regex("(?i)track\\s*0*([2-9]|[1-9]\\d+)")
 
     fun scan(src: FileSource, overrides: Map<String, String>, now: Long = System.currentTimeMillis()): ScanResult {
@@ -79,6 +82,7 @@ object Scanner {
                 val tid = switchTitleId.find(f.name)?.value
                 if (tid != null && !tid.endsWith("000")) continue
             }
+            if (isBios(f.name)) continue
             val p = TitleParser.full(f.name)
             // Образ из нескольких дорожек без .cue: игра — первая дорожка, остальные (музыка) пропускаем
             if (GameFiles.extension(f.name) == "bin" && p.tags.any { extraTrack.matches(it.trim()) }) continue

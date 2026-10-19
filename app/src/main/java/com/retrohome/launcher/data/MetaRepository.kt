@@ -147,7 +147,7 @@ class MetaRepository(
         if (job?.isActive == true && (!retryMissing || jobRetry)) { DiagLog.add("Загрузка уже идёт — новый запуск пропущен"); return }
         job?.cancel()
         jobRetry = retryMissing
-        if (retryMissing) indexFailedAt.clear()
+        if (retryMissing) { indexFailedAt.clear(); tinfoilDownUntil = 0 }
         job = scope.launch(Dispatchers.IO) {
             if (!online()) { DiagLog.add("Загрузка не начата: Android сообщает, что интернета нет"); return@launch }
             val visual = games.filter { needsVisual(_meta.value[it.id], retryMissing) }
@@ -577,7 +577,7 @@ class MetaRepository(
         val fresh = file.exists() && System.currentTimeMillis() - file.lastModified() < 7L * 24 * 3600 * 1000
         fun cached() = file.readLines().mapNotNull { l -> l.split('\t', limit = 2).takeIf { it.size == 2 }?.let { it[0] to it[1] } }
         val entries = if (fresh) cached() else {
-            val body = get(SwitchDb.LIST_URL)
+            val body = tinfoil(SwitchDb.LIST_URL)?.let { String(it) }
             val list = body?.let(SwitchDb::parseList).orEmpty()
             when {
                 list.isNotEmpty() -> list.also { file.writeText(it.joinToString("\n") { e -> "${e.first}\t${e.second}" }) }
@@ -593,6 +593,29 @@ class MetaRepository(
         return SwitchIndex(entries).also { switchIndex = it }
     }
 
+    /** tinfoil.media не отвечал — до этого времени сразу берём данные Switch из Nlib, не дожидаясь его. */
+    @Volatile private var tinfoilDownUntil = 0L
+
+    /**
+     * Запрос к tinfoil.media. После сбоя (таймаут, ошибка сервера, нет адреса) 10 минут не ждём его:
+     * каждый зависший запрос — до пары минут, а игр много. Пропуск считается сбоем сети,
+     * чтобы игра, которой нет в запасном источнике, не записалась как «не найдено».
+     */
+    private fun tinfoil(url: String): ByteArray? {
+        if (System.currentTimeMillis() < tinfoilDownUntil) {
+            netErrors.set(errorsHere() + 1)
+            if (lastProblem.get() == null) lastProblem.set("tinfoil.media недоступен, повтор позже")
+            return null
+        }
+        val before = errorsHere()
+        val bytes = getBytes(url)
+        if (bytes == null && errorsHere() > before) {
+            tinfoilDownUntil = System.currentTimeMillis() + 10 * 60_000
+            DiagLog.add("tinfoil.media не отвечает (${lastProblem.get() ?: "?"}) — 10 минут беру данные Switch из запасного источника (api.nlib.cc)")
+        }
+        return bytes
+    }
+
     /** Поиск игры Switch: Title ID из имени файла или по названию. Страница игры грузится один раз. */
     private inner class SwitchLookup(val game: Game, val title: String?) {
         val id: String? by lazy {
@@ -602,7 +625,7 @@ class MetaRepository(
         }
         val page: SwitchDb.Page? by lazy {
             val tid = id ?: return@lazy null
-            get(SwitchDb.pageUrl(tid))?.let(SwitchDb::parsePage)?.let { return@lazy it }
+            tinfoil(SwitchDb.pageUrl(tid))?.let { SwitchDb.parsePage(String(it)) }?.let { return@lazy it }
             // tinfoil не ответил или страницы нет — запасной источник Nlib (по тому же Title ID)
             get(SwitchDb.nlibInfoUrl(tid))?.let(SwitchDb::parseNlib)
                 ?.also { DiagLog.add("[SWITCH] ${game.title}: данные из запасного источника (api.nlib.cc)") }
@@ -613,9 +636,10 @@ class MetaRepository(
     private fun fetchSwitchCover(sw: SwitchLookup): Triple<String, String?, String?>? {
         val id = sw.id ?: return null
         // Сначала tinfoil, а если он не ответил или прислал не картинку — запасной источник Nlib
-        val icon = listOf(SwitchDb.iconUrl(id), SwitchDb.nlibIconUrl(id)).firstNotNullOfOrNull { url ->
-            getBytes(url)?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
-        } ?: return null.also { DiagLog.add("[SWITCH] ${sw.game.title}: иконка не загрузилась (${lastProblem.get() ?: "нет в базах"})") }
+        val icon = listOf(
+            { tinfoil(SwitchDb.iconUrl(id)) },
+            { getBytes(SwitchDb.nlibIconUrl(id)) },
+        ).firstNotNullOfOrNull { load -> load()?.let { BitmapFactory.decodeByteArray(it, 0, it.size) } } ?: return null.also { DiagLog.add("[SWITCH] ${sw.game.title}: иконка не загрузилась (${lastProblem.get() ?: "нет в базах"})") }
         val poster = switchPoster(icon)
         icon.recycle()
         val out = saveCover(sw.game, poster)
@@ -894,7 +918,7 @@ class MetaRepository(
     }
 
     companion object {
-        const val VERSION = "0.35"
+        const val VERSION = "0.36"
         /** Страница проекта — контакт в подписи запросов (Issues для связи). */
         const val PROJECT_URL = "https://github.com/fenomen64/retro-home"
         const val USER_AGENT = "RetroHome/$VERSION (personal Android game launcher)"
