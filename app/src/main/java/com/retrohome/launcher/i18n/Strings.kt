@@ -254,6 +254,8 @@ data class Strings(
     val diag: DiagStrings,
     /** Форма значков приложений. */
     val shape: ShapeStrings,
+    /** Масштаб интерфейса. */
+    val scale: ScaleStrings,
 ) {
     val langName: String get() = if (lang == Lang.RU) "Русский" else "English"
 
@@ -538,6 +540,11 @@ val RU = Strings(
     pickMusic = "Выбрать свою мелодию",
     pickMusicDesc = "Любой аудиофайл с устройства, будет играть по кругу",
     musicVolume = "Громкость музыки",
+    scale = ScaleStrings(
+        title = "Масштаб интерфейса",
+        desc = "Размер консольного режима. «Авто» подстраивает его под высоту экрана, чтобы всё помещалось",
+        auto = "Авто · %d%%",
+    ),
     shape = ShapeStrings(
         title = "Форма значков",
         desc = "«Как в системе» — по настройке Android; если в системе форма не меняется, выберите здесь",
@@ -861,6 +868,11 @@ val EN = Strings(
     pickMusic = "Choose your own track",
     pickMusicDesc = "Any audio file from the device, played on a loop",
     musicVolume = "Music volume",
+    scale = ScaleStrings(
+        title = "Interface scale",
+        desc = "Size of the console mode. \"Auto\" fits it to the screen height so everything fits",
+        auto = "Auto · %d%%",
+    ),
     shape = ShapeStrings(
         title = "Icon shape",
         desc = "\"System\" follows the Android setting; if the system shape doesn't change, pick one here",
@@ -984,6 +996,9 @@ data class RaStrings(
     val raNet: String,
     val raRemove: String,
 )
+
+/** Масштаб интерфейса. */
+data class ScaleStrings(val title: String, val desc: String, val auto: String)
 
 /** Форма значков. */
 data class ShapeStrings(

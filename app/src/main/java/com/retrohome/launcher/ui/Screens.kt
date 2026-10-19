@@ -125,6 +125,7 @@ interface SettingsActions {
     fun toggleGestures() {}
     fun cycleIconPack(dir: Int = 1) {}
     fun cycleIconShape(dir: Int = 1) {}
+    fun cycleUiScale(dir: Int = 1) {}
     fun editContact() {}
     fun editRaAccount() {}
     fun openNetworkCheck() {}
@@ -237,6 +238,12 @@ fun SettingsScreen(
             }
             item {
                 ChoiceRow(s.swapAB, if (settings.swapAB) s.on else s.off, desc = s.swapABDesc) { a.toggleSwap() }
+            }
+            item {
+                val cfg = androidx.compose.ui.platform.LocalConfiguration.current
+                val auto = (UiScale.auto(minOf(cfg.screenWidthDp, cfg.screenHeightDp)) * 100).toInt()
+                val value = if (settings.uiScale <= 0) s.scale.auto.format(auto) else "${settings.uiScale}%"
+                ChoiceRow(s.scale.title, value, desc = s.scale.desc) { a.cycleUiScale(it) }
             }
             item {
                 FocusRow(onClick = a::openDefaultHome) { TitleAndDesc(s.setDefault, s.setDefaultDesc) }

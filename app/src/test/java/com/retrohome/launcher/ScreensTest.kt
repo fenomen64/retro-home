@@ -135,7 +135,12 @@ private object FakeCovers : com.retrohome.launcher.ui.CoverLoader {
     override fun load(name: String): ImageBitmap = make(name)
     private fun make(name: String): ImageBitmap {
         if (name.contains("_s.")) return snap(name)
-        val w = 300; val h = 420
+        // Пропорции как у настоящих коробок: GBA — почти квадрат, SNES (США) — шире, чем выше
+        val (w, h) = when {
+            "[square]" in name -> 400 to 400
+            "[wide]" in name -> 420 to 300
+            else -> 300 to 420
+        }
         val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
         val hue = Math.floorMod(name.hashCode(), 360).toFloat()
@@ -148,7 +153,7 @@ private object FakeCovers : com.retrohome.launcher.ui.CoverLoader {
         p.color = 0x22FFFFFF
         c.drawCircle(w * 0.7f, h * 0.35f, w * 0.45f, p)
         p.color = 0xFFFFFFFF.toInt(); p.textSize = 34f; p.isFakeBoldText = true
-        name.removeSuffix(".webp").split(' ').chunked(2).forEachIndexed { i, words ->
+        name.removeSuffix(".webp").replace("[square]", "").replace("[wide]", "").trim().split(' ').chunked(2).forEachIndexed { i, words ->
             c.drawText(words.joinToString(" "), 20f, h - 120f + i * 40f, p)
         }
         p.color = 0xFF000000.toInt(); c.drawRect(0f, 0f, w.toFloat(), 36f, p)
@@ -1297,5 +1302,73 @@ class AppModeUiTest {
             android.content.Intent(android.content.Intent.ACTION_MAIN).addCategory(android.content.Intent.CATEGORY_HOME).setPackage(app.packageName), 0,
         ).map { it.activityInfo.name }
         assertEquals(listOf(MainActivity::class.java.name), home)
+    }
+}
+
+
+/** Обложки в своих пропорциях и масштаб интерфейса на невысоких экранах. */
+@RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(application = Application::class, sdk = [35])
+class CoverAndScaleUiTest {
+    @get:Rule val compose = createComposeRule()
+    private val pads = PadRegistry()
+
+    private fun pageEntry(cover: String) = com.retrohome.launcher.ui.console.ConsoleEntry(
+        key = "game:ff", label = "Final Fantasy V Advance", favorite = false, zone = ConsoleZone.GAME, kind = com.retrohome.launcher.ui.console.EntryKind.GAME,
+        system = GS.GBA, cover = cover, subtitle = "GBA · USA · запуск в GBA.emu",
+        description = "Final Fantasy V — японская ролевая игра для приставки Super Famicom, разработанная и выпущенная компанией Square в 1992 году, пятая номерная часть серии Final Fantasy. ".repeat(4),
+        descSource = "wikipedia", year = 1992, genres = listOf("компьютерная ролевая игра"), developers = listOf("Square"),
+    )
+
+    private fun page(cover: String, scale: Float, shot: String) {
+        compose.setContent {
+            val base = androidx.compose.ui.platform.LocalDensity.current
+            CompositionLocalProvider(
+                LocalStrings provides RU,
+                LocalIconLoader provides FakeIcons,
+                com.retrohome.launcher.ui.LocalCoverLoader provides FakeCovers,
+                com.retrohome.launcher.ui.LocalRemoteImages provides FakeBadges,
+                com.retrohome.launcher.audio.LocalSfx provides RecordingSfx(),
+                LocalPadRegistry provides pads,
+                androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(base.density * scale, base.fontScale),
+            ) {
+                com.retrohome.launcher.ui.console.GamePage(pageEntry(cover), 0, androidx.compose.foundation.rememberScrollState(), "✕", "○", true,
+                    onButton = {}, onBack = {}, onOptions = {}, onFavorite = {}, onSwitch = {})
+            }
+        }
+        compose.waitForIdle()
+        compose.onRoot().captureRoboImage("$SHOTS/$shot")
+    }
+
+    /** Квадратная обложка GBA показывается целиком, рамка — квадратная. */
+    @Test
+    @Config(qualifiers = "w960dp-h540dp-land-xhdpi")
+    fun squareCoverIsNotCropped() {
+        page("FF5 [square].webp", 1f, "40_page_square_cover.png")
+        val node = compose.onNodeWithTag("pageCover", useUnmergedTree = true).fetchSemanticsNode()
+        val r = node.size
+        assertTrue("рамка ${r.width}×${r.height} должна быть квадратной", kotlin.math.abs(r.width - r.height) <= 2)
+    }
+
+    /** Телефон друга: экран 411 dp в высоту. Без масштаба описание зажато, с авто-масштабом — как на Retroid. */
+    @Test
+    @Config(qualifiers = "w911dp-h411dp-land-xxhdpi")
+    fun shortScreenIsScaled() {
+        page("FF3 [wide].webp", 1f, "41_page_short_screen_no_scale.png")
+        assertEquals(0.76f, com.retrohome.launcher.ui.UiScale.auto(411), 0.01f)
+    }
+
+    @Test
+    @Config(qualifiers = "w911dp-h411dp-land-xxhdpi")
+    fun shortScreenAutoScale() {
+        page("FF3 [wide].webp", com.retrohome.launcher.ui.UiScale.auto(411), "42_page_short_screen_auto_scale.png")
+    }
+
+    @Test fun scaleRules() {
+        assertEquals(1f, com.retrohome.launcher.ui.UiScale.auto(540), 0.001f)
+        assertEquals(1f, com.retrohome.launcher.ui.UiScale.auto(800), 0.001f)
+        assertEquals(0.7f, com.retrohome.launcher.ui.UiScale.auto(300), 0.001f)
+        assertEquals(0.9f, com.retrohome.launcher.ui.UiScale.factor(90, 411), 0.001f)
     }
 }

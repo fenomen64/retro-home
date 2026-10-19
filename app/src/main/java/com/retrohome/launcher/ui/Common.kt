@@ -178,6 +178,13 @@ fun rememberCover(name: String?): ImageBitmap? {
     return bmp
 }
 
+/**
+ * Пропорции обложки (ширина / высота): у консолей они разные — у Game Boy почти квадратные,
+ * у SNES (США) — шире, чем выше. Пока обложки нет — 3:4.
+ */
+fun coverAspect(img: ImageBitmap?): Float =
+    img?.takeIf { it.height > 0 }?.let { (it.width.toFloat() / it.height).coerceIn(0.5f, 1.8f) } ?: 0.75f
+
 @Composable
 fun AppIcon(key: String, size: Dp, modifier: Modifier = Modifier) {
     val px = with(LocalDensity.current) { size.roundToPx() }

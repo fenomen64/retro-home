@@ -100,6 +100,7 @@ interface PhoneActions {
     fun openWidgets() {}
     fun resizeWidget(id: Long, w: Int, h: Int) {}
     fun openNotifications() {}
+    fun setIconShape(id: String) {}
 }
 
 /** Как показать виджет; в приложении — настоящий виджет, в тестах — заглушка. */
@@ -440,6 +441,15 @@ fun PhoneHome(
                                 s.addPage to { actions.addPage() },
                             )
                             if (empty && data.pageCount > 1) entries += s.deletePage to { actions.deletePage(page) }
+                            entries += "${s.shape.title}: ${s.shape.name(data.settings.iconShape)}" to {
+                                state.sheet = Sheet(
+                                    s.shape.title,
+                                    com.retrohome.launcher.data.IconShapes.ids.map { id ->
+                                        val mark = if (id == data.settings.iconShape) "  •" else ""
+                                        (s.shape.name(id) + mark) to { actions.setIconShape(id) }
+                                    },
+                                )
+                            }
                             entries += s.settings to { actions.openSettings() }
                             state.sheet = Sheet("", entries)
                         },

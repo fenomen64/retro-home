@@ -198,16 +198,21 @@ private fun Thumb(e: ConsoleEntry, modifier: Modifier, iconSize: Dp = 40.dp) {
         return
     }
     val c = e.system?.let { systemColor(it) } ?: Palette.surfaceHi
-    Box(
-        modifier
-            .aspectRatio(0.75f)
-            .clip(RoundedCornerShape(8.dp))
-            .background(Brush.verticalGradient(listOf(c, c.copy(red = c.red * 0.45f, green = c.green * 0.45f, blue = c.blue * 0.45f)))),
-        contentAlignment = Alignment.Center,
-    ) {
-        val cover = rememberCover(e.cover)
-        if (cover != null) Image(cover, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-        else Text(e.system?.short ?: "", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+    val cover = rememberCover(e.cover)
+    // Место под обложку одинаковое (список ровный), а сама обложка — целиком, в своих пропорциях
+    Box(modifier.aspectRatio(0.75f), contentAlignment = Alignment.Center) {
+        if (cover != null) {
+            Image(
+                cover, null, contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxWidth().aspectRatio(com.retrohome.launcher.ui.coverAspect(cover)).clip(RoundedCornerShape(8.dp)),
+            )
+        } else Box(
+            Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(8.dp))
+                .background(Brush.verticalGradient(listOf(c, c.copy(red = c.red * 0.45f, green = c.green * 0.45f, blue = c.blue * 0.45f)))),
+            contentAlignment = Alignment.Center,
+        ) { Text(e.system?.short ?: "", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold) }
     }
 }
 

@@ -50,24 +50,41 @@ object IconShapes {
      * (видна центральная часть, как в Android), края маски сглажены. Обычный — как есть.
      */
     fun render(d: Drawable, size: Int, mask: String?): Bitmap {
-        if (d !is AdaptiveIconDrawable || mask == null) return d.toBitmap(size, size)
+        if (mask == null) return d.toBitmap(size, size)
         val path = runCatching { PathParser.createPathFromPathData(mask) }.getOrNull() ?: return d.toBitmap(size, size)
         path.transform(Matrix().apply { setScale(size / 100f, size / 100f) })
-        // Слои рисуем целиком, затем переносим внутрь фигуры: картинка служит «заливкой» пути
-        val full = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-        val fc = Canvas(full)
-        val inset = size / 4
-        for (layer in listOfNotNull(d.background, d.foreground)) {
-            layer.setBounds(-inset, -inset, size + inset, size + inset)
-            layer.draw(fc)
+        val full: Bitmap
+        if (d is AdaptiveIconDrawable) {
+            // Слои рисуем целиком, затем переносим внутрь фигуры: картинка служит «заливкой» пути
+            full = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+            val fc = Canvas(full)
+            val inset = size / 4
+            for (layer in listOfNotNull(d.background, d.foreground)) {
+                layer.setBounds(-inset, -inset, size + inset, size + inset)
+                layer.draw(fc)
+            }
+        } else {
+            // Обычный значок. Если он квадратный во всю площадь (многие прошивки отдают значки уже
+            // квадратными) — обрезаем по форме; если у него своя форма с прозрачными краями — оставляем
+            full = d.toBitmap(size, size, Bitmap.Config.ARGB_8888)
+            if (!isFullBleed(full)) return full
         }
         val out = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
             shader = android.graphics.BitmapShader(full, android.graphics.Shader.TileMode.CLAMP, android.graphics.Shader.TileMode.CLAMP)
         }
         Canvas(out).drawPath(path, paint)
-        full.recycle()
+        // Освобождаем только свою промежуточную картинку: у обычного значка toBitmap может вернуть
+        // его собственную картинку, которую нельзя трогать
+        if (d is AdaptiveIconDrawable) full.recycle()
         return out
+    }
+
+    /** Значок закрашен до самых углов (квадратная картинка без своей формы). */
+    fun isFullBleed(b: Bitmap): Boolean {
+        val m = (b.width * 0.04f).toInt().coerceAtLeast(1)
+        val pts = listOf(m to m, b.width - 1 - m to m, m to b.height - 1 - m, b.width - 1 - m to b.height - 1 - m)
+        return pts.all { (x, y) -> android.graphics.Color.alpha(b.getPixel(x, y)) > 200 }
     }
 
     /** Путь маски (для проверок и предпросмотра). */

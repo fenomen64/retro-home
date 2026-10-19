@@ -34,6 +34,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
@@ -173,19 +174,22 @@ fun GamePage(
 
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(start = 36.dp, end = 36.dp, top = 20.dp, bottom = 8.dp)) {
-                val coverHeight = (maxHeight * 0.92f)
+                // Обложка целиком, в своих пропорциях: высота — по экрану, но не шире 42% страницы
+                val ar = com.retrohome.launcher.ui.coverAspect(cover)
+                val coverHeight = minOf(maxHeight * 0.92f, maxWidth * 0.42f / ar)
                 Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
                     // Обложка
                     Box(
                         Modifier
+                            .testTag("pageCover")
                             .height(coverHeight)
-                            .aspectRatio(0.75f)
+                            .aspectRatio(ar)
                             .shadow(18.dp, RoundedCornerShape(18.dp))
                             .clip(RoundedCornerShape(18.dp))
                             .background(e.system?.let { systemColor(it) } ?: Palette.surface),
                         contentAlignment = Alignment.Center,
                     ) {
-                        if (cover != null) Image(cover, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                        if (cover != null) Image(cover, null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
                         else Text(
                             e.label, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(14.dp),

@@ -54,6 +54,8 @@ data class Settings(
     val iconPack: String? = null,
     /** Форма значков: system — как в системе, или circle, squircle, rounded, square, teardrop, none. */
     val iconShape: String = "system",
+    /** Масштаб консольного интерфейса в процентах; 0 — авто (по размеру экрана). */
+    val uiScale: Int = 0,
     /**
      * Почта для связи в запросах к Википедии: так требуют её правила, и с ней лимит запросов
      * 200 в минуту вместо 10. Видит только Википедия.

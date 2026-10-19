@@ -300,6 +300,13 @@ open class MainActivity : ComponentActivity() {
                     com.retrohome.launcher.ui.LocalAppMode provides appMode,
                     com.retrohome.launcher.ui.LocalAppExit provides { moveTaskToBack(true) },
                 ) {
+                    // Консольный интерфейс масштабируется под высоту экрана (см. UiScale)
+                    val baseDensity = androidx.compose.ui.platform.LocalDensity.current
+                    val cfg = LocalConfiguration.current
+                    val k = if (consoleNow) com.retrohome.launcher.ui.UiScale.factor(st.uiScale, minOf(cfg.screenWidthDp, cfg.screenHeightDp)) else 1f
+                    CompositionLocalProvider(
+                        androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(baseDensity.density * k, baseDensity.fontScale)
+                    ) {
                     MainScreen(
                         data = data,
                         apps = apps,
@@ -312,6 +319,7 @@ open class MainActivity : ComponentActivity() {
                         onThemedSurface = { themedSurface = it },
                         onAddWidget = ::addWidget,
                     )
+                    }
                 }
             }
         }

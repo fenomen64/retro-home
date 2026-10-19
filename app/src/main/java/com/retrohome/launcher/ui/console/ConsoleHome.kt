@@ -864,8 +864,10 @@ private fun CardRow(
         itemsIndexed(entries, key = { _, e -> e.key }) { i, e ->
             val isSel = rowActive && i == selected
             val scale by animateFloatAsState(if (isSel) 1.08f else 1f, label = "cardScale")
+            // Карточка игры — в пропорциях её обложки, чтобы обложка не обрезалась
+            val faceCover = if (e.kind == EntryKind.GAME) rememberCover(e.cover) else null
             val w = when (e.kind) {
-                EntryKind.GAME -> cardSize * 0.75f
+                EntryKind.GAME -> cardSize * com.retrohome.launcher.ui.coverAspect(faceCover)
                 EntryKind.ACTION -> cardSize * 2.6f
                 EntryKind.APP -> cardSize
             }
@@ -901,7 +903,7 @@ internal fun GameFace(e: ConsoleEntry) {
     val cover = rememberCover(e.cover)
     if (cover != null) {
         Box(Modifier.fillMaxSize()) {
-            Image(cover, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            Image(cover, null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
         }
         return
     }

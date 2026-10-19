@@ -516,6 +516,13 @@ class LauncherController(
         d.copy(settings = d.settings.copy(iconPack = options.cycle(d.settings.iconPack, dir)))
     }
 
+    fun setIconShape(id: String) = store.update { d -> d.copy(settings = d.settings.copy(iconShape = id)) }
+
+    /** Масштаб интерфейса консоли: 0 — авто, иначе проценты. */
+    fun cycleUiScale(dir: Int = 1) = store.update { d ->
+        d.copy(settings = d.settings.copy(uiScale = com.retrohome.launcher.ui.UiScale.options.cycle(d.settings.uiScale, dir)))
+    }
+
     /** Форма значков по кругу: как в системе, круг, капля… */
     fun cycleIconShape(dir: Int = 1) = store.update { d ->
         d.copy(settings = d.settings.copy(iconShape = com.retrohome.launcher.data.IconShapes.ids.cycle(d.settings.iconShape, dir)))

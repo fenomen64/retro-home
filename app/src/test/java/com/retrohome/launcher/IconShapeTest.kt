@@ -59,6 +59,24 @@ class IconShapeTest {
 
     }
 
+    /** Обычный квадратный значок (так отдают значки многие прошивки) тоже обрезается по форме. */
+    @Test fun squareBitmapIconsAreCroppedToo() {
+        val n = 96
+        val square = Bitmap.createBitmap(n, n, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.rgb(200, 60, 60)) }
+        val round = Bitmap.createBitmap(n, n, Bitmap.Config.ARGB_8888).also {
+            Canvas(it).drawCircle(n / 2f, n / 2f, n / 2f - 2, android.graphics.Paint().apply { color = Color.BLUE; isAntiAlias = true })
+        }
+        val sq = IconShapes.render(android.graphics.drawable.BitmapDrawable(app.resources, square), n, IconShapes.maskFor("circle"))
+        assertEquals(0, alpha(sq, 1, 1))
+        assertEquals(255, alpha(sq, n / 2, n / 2))
+        // У значка своя форма (прозрачные углы) — не трогаем
+        assertFalse(IconShapes.isFullBleed(round))
+        val rd = IconShapes.render(android.graphics.drawable.BitmapDrawable(app.resources, round), n, IconShapes.maskFor("square"))
+        assertEquals(0, alpha(rd, 1, 1))
+        // «Без обрезки» — квадрат остаётся квадратом
+        assertEquals(255, alpha(IconShapes.render(android.graphics.drawable.BitmapDrawable(app.resources, square), n, IconShapes.maskFor("none")), 1, 1))
+    }
+
     @Test fun choicesAndNames() {
         assertEquals(listOf("system", "circle", "squircle", "rounded", "square", "teardrop", "none"), IconShapes.ids)
         assertNull(IconShapes.maskFor("none"))
