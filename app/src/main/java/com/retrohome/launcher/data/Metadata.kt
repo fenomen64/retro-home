@@ -120,6 +120,49 @@ object Thumbnails {
 
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8").replace("+", "%20")
 
+    // --- Запасной источник: те же обложки в репозиториях libretro-thumbnails на GitHub ---
+    // (thumbnails.libretro.com у части провайдеров не открывается: DNS или блокировка)
+
+    const val MIRROR_RAW = "https://raw.githubusercontent.com/libretro-thumbnails"
+    const val MIRROR_API = "https://api.github.com/repos/libretro-thumbnails"
+
+    /** «Nintendo - Game Boy Advance» → репозиторий «Nintendo_-_Game_Boy_Advance». */
+    fun mirrorRepo(system: GameSystem): String? = dirs[system]?.replace(' ', '_')
+
+    /** Файл картинки: dir — Named_Boxarts, Named_Snaps или Named_Titles. */
+    fun fileUrl(system: GameSystem, dir: String, name: String, mirror: Boolean): String? =
+        if (mirror) mirrorRepo(system)?.let { "$MIRROR_RAW/$it/master/$dir/${enc(name)}.png" }
+        else dirs[system]?.let { "$BASE/${enc(it)}/$dir/${enc(name)}.png" }
+
+    /** Содержимое папки репозитория (GitHub API: дерево по ветке или по sha). */
+    fun mirrorTreeUrl(system: GameSystem, ref: String): String? = mirrorRepo(system)?.let { "$MIRROR_API/$it/git/trees/$ref" }
+
+    private fun treeEntries(json: String): List<JsonObject> =
+        runCatching { Json.parseToJsonElement(json).jsonObject["tree"]?.jsonArray?.map { it.jsonObject } }.getOrNull().orEmpty()
+
+    /** sha вложенной папки в ответе GitHub API. */
+    fun treeDirSha(json: String, dir: String): String? = treeEntries(json).firstOrNull {
+        it["path"]?.jsonPrimitive?.content == dir && it["type"]?.jsonPrimitive?.content == "tree"
+    }?.get("sha")?.jsonPrimitive?.content
+
+    /** Имена обложек (без .png) из ответа GitHub API — тот же список, что на сайте libretro. */
+    fun treePngNames(json: String): List<String> = treeEntries(json).mapNotNull { e ->
+        e["path"]?.jsonPrimitive?.content?.takeIf { it.endsWith(".png", ignoreCase = true) }?.dropLast(4)
+    }
+
+    /**
+     * Часть файлов в репозитории — ссылки на другой файл (одна обложка на несколько версий игры).
+     * Сайт libretro отдаёт по ним картинку, а GitHub — текст ссылки: имя файла, на который она ведёт.
+     */
+    fun linkTarget(bytes: ByteArray): String? {
+        if (bytes.size < 5 || bytes.size > 512) return null
+        val isImage = (bytes[0] == 0x89.toByte() && bytes[1] == 'P'.code.toByte()) || (bytes[0] == 0xFF.toByte() && bytes[1] == 0xD8.toByte())
+        if (isImage) return null
+        val text = String(bytes).trim()
+        if ('\n' in text || !text.endsWith(".png", ignoreCase = true)) return null
+        return text.substringAfterLast('/').dropLast(4)
+    }
+
     fun indexUrl(system: GameSystem): String? = dirs[system]?.let { "$BASE/${enc(it)}/Named_Boxarts/" }
 
     fun imageUrl(system: GameSystem, name: String): String? =

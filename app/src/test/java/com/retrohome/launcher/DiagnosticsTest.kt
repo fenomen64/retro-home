@@ -75,7 +75,7 @@ class DiagnosticsTest {
         waitDone(r)
         val log = DiagLog.snapshot().joinToString("\n")
         assertTrue(log, "игр 1, нужны обложки 1, описания 1" in log)
-        assertTrue(log, "Список обложек PS1: загружен" in log && "1 имён" in log)
+        assertTrue(log, "Список обложек PS1: libretro" in log && "1 имён" in log)
         assertTrue(log, "[PS1] Crash Bandicoot: обложка — нет похожего имени в списке" in log)
         assertTrue(log, "[PS1] Crash Bandicoot: описание — не найдено" in log)
     }

@@ -570,6 +570,7 @@ val RU = Strings(
         lWikidata = "Викиданные",
         lSwitch = "Игры Switch (tinfoil.media)",
         lRa = "RetroAchievements",
+        lCoversMirror = "Обложки — запасной источник (GitHub)",
         kNoDns = "Не удаётся найти сайт: нет интернета, не работает DNS или сайт заблокирован. Попробуйте другую сеть; в настройках Android проверьте «Частный DNS».",
         kTimeout = "Сайт не отвечает: соединение слишком медленное или блокируется. Попробуйте другую сеть или VPN.",
         kRefused = "Соединение отклонено: сайт недоступен из этой сети. Попробуйте другую сеть или VPN.",
@@ -881,6 +882,7 @@ val EN = Strings(
         lWikidata = "Wikidata",
         lSwitch = "Switch games (tinfoil.media)",
         lRa = "RetroAchievements",
+        lCoversMirror = "Covers — backup source (GitHub)",
         kNoDns = "Can't find the site: no internet, DNS isn't working, or the site is blocked. Try another network and check Android's Private DNS setting.",
         kTimeout = "The site doesn't respond: the connection is too slow or blocked. Try another network or a VPN.",
         kRefused = "Connection refused: the site isn't reachable from this network. Try another network or a VPN.",
@@ -998,6 +1000,7 @@ data class NetStrings(
     val lWikidata: String,
     val lSwitch: String,
     val lRa: String,
+    val lCoversMirror: String,
     val kNoDns: String,
     val kTimeout: String,
     val kRefused: String,
@@ -1011,7 +1014,7 @@ data class NetStrings(
     val problemHint: String,
 ) {
     fun label(id: String) = when (id) {
-        "covers" -> lCovers; "wikiEn" -> lWikiEn; "wikiRu" -> lWikiRu; "wikidata" -> lWikidata; "switch" -> lSwitch; else -> lRa
+        "covers" -> lCovers; "coversMirror" -> lCoversMirror; "wikiEn" -> lWikiEn; "wikiRu" -> lWikiRu; "wikidata" -> lWikidata; "switch" -> lSwitch; else -> lRa
     }
 
     fun explain(kind: com.retrohome.launcher.data.NetworkCheck.Kind) = when (kind) {

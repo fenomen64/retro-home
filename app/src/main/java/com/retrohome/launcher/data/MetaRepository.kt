@@ -143,8 +143,11 @@ class MetaRepository(
      * ограничивает частоту), потом по одной — описания из Википедии.
      */
     fun fetch(games: List<Game>, titleFor: (Game) -> String? = { null }, retryMissing: Boolean = false) {
-        if (job?.isActive == true && !retryMissing) { DiagLog.add("Загрузка уже идёт — новый запуск пропущен"); return }
+        // Уже идёт загрузка (или повтор, если просят повтор) — не начинаем заново, иначе она никогда не дойдёт до конца
+        if (job?.isActive == true && (!retryMissing || jobRetry)) { DiagLog.add("Загрузка уже идёт — новый запуск пропущен"); return }
         job?.cancel()
+        jobRetry = retryMissing
+        if (retryMissing) indexFailedAt.clear()
         job = scope.launch(Dispatchers.IO) {
             if (!online()) { DiagLog.add("Загрузка не начата: Android сообщает, что интернета нет"); return@launch }
             val visual = games.filter { needsVisual(_meta.value[it.id], retryMissing) }
@@ -245,6 +248,8 @@ class MetaRepository(
         indexDir.listFiles().orEmpty().filter { it.name.endsWith(".txt") }.sortedBy { it.name }.map { f ->
             Triple(f.name.removeSuffix(".txt"), runCatching { f.readLines().count { it.isNotBlank() } }.getOrDefault(-1), f.lastModified())
         }
+
+    @Volatile private var jobRetry = false
 
     /** Идёт ли сейчас загрузка. */
     val running: Boolean get() = job?.isActive == true
@@ -397,8 +402,12 @@ class MetaRepository(
             last = r
             val wait: Long = when (r.code) {
                 200 -> { _problem.value = null; return r.body }
-                // нет связи или сервер перегружен — подождать и повторить
-                0, 500, 502, 503, 504 -> (2L shl attempt).coerceAtMost(5)
+                // адрес сайта не находится (DNS, блокировка) — повтор через секунды не поможет
+                0 -> if (r.error?.contains("UnknownHost") == true) break
+                    // сайт не отвечает — одна повторная попытка, дальше считаем сбоем (а не ждём минутами)
+                    else if (attempt >= 1) break else 2L
+                // сервер перегружен — подождать и повторить
+                500, 502, 503, 504 -> (2L shl attempt).coerceAtMost(5)
                 // «слишком много запросов» — ждём, сколько попросил сервер
                 429 -> (r.retryAfter?.trim()?.toLongOrNull() ?: (2L shl attempt)).coerceIn(1, 30)
                 // сайт отклонил запрос (например, фильтр по подписи или по адресу) — это не «нет такой страницы»
@@ -422,28 +431,107 @@ class MetaRepository(
     /** Список обложек каталога системы; хранится неделю. */
     private fun index(system: GameSystem): Thumbnails.Index? = synchronized(indexes) { loadIndex(system) }
 
+    /** Сайт обложек libretro недоступен (DNS, блокировка, таймауты) — берём те же обложки с GitHub. */
+    @Volatile private var mirror = false
+
+    /** Когда список обложек консоли последний раз не загрузился ни откуда: не пытаться снова для каждой игры. */
+    private val indexFailedAt = java.util.concurrent.ConcurrentHashMap<GameSystem, Long>()
+
+    /** Сначала источник, который работал последним, потом другой. */
+    private fun sourceOrder() = if (mirror) listOf(true, false) else listOf(false, true)
+
+    private fun useSource(fromMirror: Boolean) {
+        if (fromMirror == mirror) return
+        mirror = fromMirror
+        DiagLog.add(
+            if (fromMirror) "Сайт обложек libretro недоступен (${lastProblem.get() ?: "?"}) — беру обложки с GitHub"
+            else "Сайт обложек libretro снова отвечает — беру обложки с него"
+        )
+    }
+
     private fun loadIndex(system: GameSystem): Thumbnails.Index? {
         indexes[system]?.let { return it }
         val file = File(indexDir, system.name + ".txt")
         // Пустой список (ответ испорчен фильтром, VPN или страницей-заглушкой) не запоминаем
         val fresh = file.exists() && file.length() > 0 && System.currentTimeMillis() - file.lastModified() < 7L * 24 * 3600 * 1000
-        val names = if (fresh) file.readLines().filter { it.isNotBlank() }.also { DiagLog.add("Список обложек ${system.name}: из кэша, ${it.size} имён") } else {
-            val url = Thumbnails.indexUrl(system) ?: return null.also { DiagLog.add("Список обложек ${system.name}: для этой консоли в базе libretro обложек нет") }
-            val html = get(url) ?: return null.also { DiagLog.add("Список обложек ${system.name}: не загрузился (${lastProblem.get() ?: "?"})") }
-            val parsed = Thumbnails.parseIndex(html)
-            DiagLog.add("Список обложек ${system.name}: загружен, ${html.length / 1024} КБ, ${parsed.size} имён")
-            if (parsed.isEmpty()) {
-                DiagLog.add("Список обложек ${system.name}: начало ответа: " + html.take(160).replace(Regex("\\s+"), " "))
-                // Сайт ответил, но вместо списка обложек — что-то другое: это сбой, а не «обложки нет»
+        if (fresh) {
+            val names = file.readLines().filter { it.isNotBlank() }
+            DiagLog.add("Список обложек ${system.name}: из кэша, ${names.size} имён")
+            return Thumbnails.Index(names).also { indexes[system] = it }
+        }
+        if (Thumbnails.indexUrl(system) == null) {
+            DiagLog.add("Список обложек ${system.name}: для этой консоли в базе libretro обложек нет")
+            return null
+        }
+        // Только что не загрузился — не ждать сеть заново для каждой игры, повторим позже
+        indexFailedAt[system]?.let { t ->
+            if (System.currentTimeMillis() - t < 2 * 60_000) {
                 netErrors.set(errorsHere() + 1)
-                val problem = "${runCatching { URL(url).host }.getOrDefault("?")}: вместо списка обложек пришла другая страница"
-                if (lastProblem.get() == null) lastProblem.set(problem)
-                _problem.value = problem
+                if (lastProblem.get() == null) lastProblem.set("список обложек ${system.name} недоступен, повтор позже")
                 return null
             }
-            parsed.also { file.writeText(it.joinToString("\n")) }
         }
+        var names: List<String>? = null
+        for (fromMirror in sourceOrder()) {
+            names = if (fromMirror) indexFromMirror(system) else indexFromLibretro(system)
+            if (names != null) { useSource(fromMirror); break }
+        }
+        if (names == null) {
+            indexFailedAt[system] = System.currentTimeMillis()
+            return null
+        }
+        indexFailedAt.remove(system)
+        file.writeText(names.joinToString("\n"))
         return Thumbnails.Index(names).also { indexes[system] = it }
+    }
+
+    /** Ответ сайта, в котором нет ни одной обложки, — это сбой (страница-заглушка, обрыв), а не «обложек нет». */
+    private fun emptyListProblem(system: GameSystem, host: String, body: String) {
+        netErrors.set(errorsHere() + 1)
+        val problem = "$host: вместо списка обложек пришла другая страница"
+        if (lastProblem.get() == null) lastProblem.set(problem)
+        _problem.value = problem
+        DiagLog.add("Список обложек ${system.name}: начало ответа: " + body.take(160).replace(Regex("\\s+"), " "))
+    }
+
+    private fun indexFromLibretro(system: GameSystem): List<String>? {
+        val url = Thumbnails.indexUrl(system) ?: return null
+        val html = get(url) ?: return null.also { DiagLog.add("Список обложек ${system.name}: libretro не ответил (${lastProblem.get() ?: "?"})") }
+        val parsed = Thumbnails.parseIndex(html)
+        DiagLog.add("Список обложек ${system.name}: libretro, ${html.length / 1024} КБ, ${parsed.size} имён")
+        if (parsed.isEmpty()) { emptyListProblem(system, "thumbnails.libretro.com", html); return null }
+        return parsed
+    }
+
+    private fun indexFromMirror(system: GameSystem): List<String>? {
+        val rootUrl = Thumbnails.mirrorTreeUrl(system, "master") ?: return null
+        val root = get(rootUrl) ?: return null.also { DiagLog.add("Список обложек ${system.name}: GitHub не ответил (${lastProblem.get() ?: "?"})") }
+        val sha = Thumbnails.treeDirSha(root, "Named_Boxarts")
+            ?: return null.also { emptyListProblem(system, "api.github.com", root) }
+        val dirUrl = Thumbnails.mirrorTreeUrl(system, sha) ?: return null
+        val dir = get(dirUrl) ?: return null.also { DiagLog.add("Список обложек ${system.name}: GitHub не ответил (${lastProblem.get() ?: "?"})") }
+        val names = Thumbnails.treePngNames(dir)
+        DiagLog.add("Список обложек ${system.name}: GitHub, ${names.size} имён")
+        if (names.isEmpty()) { emptyListProblem(system, "api.github.com", dir); return null }
+        return names
+    }
+
+    /**
+     * Картинка из базы обложек: с сайта libretro, а если он недоступен — с GitHub
+     * (там часть файлов — ссылки на другой файл, по ним идём дальше).
+     */
+    private fun thumbBytes(system: GameSystem, dir: String, name: String): ByteArray? {
+        for (fromMirror in sourceOrder()) {
+            val before = errorsHere()
+            var bytes = getBytes(Thumbnails.fileUrl(system, dir, name, fromMirror) ?: return null)
+            if (bytes != null && fromMirror) Thumbnails.linkTarget(bytes)?.let { target ->
+                bytes = getBytes(Thumbnails.fileUrl(system, dir, target, true) ?: return null)
+            }
+            if (bytes != null) { useSource(fromMirror); return bytes }
+            // Файла просто нет (404) — в другом источнике его тоже нет; пробуем другой только после сбоя сети
+            if (errorsHere() == before) return null
+        }
+        return null
     }
 
     /** Файл обложки и официальное название из базы. */
@@ -451,7 +539,7 @@ class MetaRepository(
         val idx = index(g.system) ?: return null
         val name = Thumbnails.match(g.fileName, idx, title)
             ?: return null.also { DiagLog.add(tag(g) + ": обложка — нет похожего имени в списке (файл «${g.fileName}»${title?.let { t -> ", название «$t»" }.orEmpty()})") }
-        val bytes = getBytes(Thumbnails.imageUrl(g.system, name) ?: return null)
+        val bytes = thumbBytes(g.system, "Named_Boxarts", name)
             ?: return null.also { DiagLog.add(tag(g) + ": обложка «$name» — картинка не загрузилась (${lastProblem.get() ?: "нет на сервере"})") }
         // Уменьшаем до разумного размера, чтобы не занимать память
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -579,8 +667,8 @@ class MetaRepository(
     /** Снимок экрана из игры (или заставка), уменьшенный и сохранённый рядом с обложками. */
     private fun fetchSnap(g: Game, thumb: String?): String? {
         if (thumb == null) return null
-        for (url in Thumbnails.snapUrls(g.system, thumb)) {
-            val bytes = getBytes(url) ?: continue
+        for (dir in listOf("Named_Snaps", "Named_Titles")) {
+            val bytes = thumbBytes(g.system, dir, thumb) ?: continue
             return saveSnap(g, bytes)
         }
         return null
@@ -792,7 +880,7 @@ class MetaRepository(
     }
 
     companion object {
-        const val VERSION = "0.29"
+        const val VERSION = "0.30"
         /** Страница проекта — контакт в подписи запросов (Issues для связи). */
         const val PROJECT_URL = "https://github.com/fenomen64/retro-home"
         const val USER_AGENT = "RetroHome/$VERSION (personal Android game launcher)"

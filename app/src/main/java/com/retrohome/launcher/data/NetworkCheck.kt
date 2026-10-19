@@ -13,6 +13,8 @@ object NetworkCheck {
 
     val targets = listOf(
         Target("covers", "https://thumbnails.libretro.com/"),
+        // Запасной источник обложек, если сайт libretro недоступен
+        Target("coversMirror", "https://api.github.com/repos/libretro-thumbnails/Sony_-_PlayStation"),
         Target("wikiEn", "https://en.wikipedia.org/w/api.php?action=query&meta=siteinfo&format=json"),
         Target("wikiRu", "https://ru.wikipedia.org/w/api.php?action=query&meta=siteinfo&format=json"),
         Target("wikidata", "https://www.wikidata.org/w/api.php?action=query&meta=siteinfo&format=json"),
