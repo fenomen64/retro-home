@@ -225,7 +225,7 @@ private val sampleData = LauncherData(
     ),
 )
 
-private class RecordingConsoleActions : ConsoleActions {
+internal class RecordingConsoleActions : ConsoleActions {
     val log = mutableListOf<String>()
     override fun launch(key: String) { log += "launch:$key" }
     override fun toggleFavorite(key: String) { log += "fav:$key" }

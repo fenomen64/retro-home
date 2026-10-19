@@ -37,7 +37,7 @@ import com.retrohome.launcher.ui.console.AudioState
 import com.retrohome.launcher.audio.LocalSfx
 import com.retrohome.launcher.audio.Sfx
 
-enum class Screen { SETTINGS, CONSOLE_APPS, HIDDEN_APPS, SEARCH, FOLDERS, SYSTEM_PICKER, EMULATORS, TITLE_EDIT, CONSOLE_TABS, WIDGETS, CONTACT, RA_ACCOUNT, NETWORK_CHECK, DIAGNOSTICS }
+enum class Screen { SETTINGS, CONSOLE_APPS, HIDDEN_APPS, SEARCH, FOLDERS, SYSTEM_PICKER, EMULATORS, TITLE_EDIT, CONSOLE_TABS, WIDGETS, CONTACT, RA_ACCOUNT, NETWORK_CHECK, DIAGNOSTICS, UPDATE }
 
 /**
  * Лаунчер открыт как обычное приложение (значком из чужого лаунчера), а не как главный экран:
@@ -73,6 +73,9 @@ fun MainScreen(
     val s = LocalStrings.current
     val console = LocalAppMode.current || isConsoleMode(data.settings.mode, landscape)
     val stack = remember { mutableStateListOf<Screen>() }
+    // Обновление лаунчера: что известно о новой версии
+    val updateState by controller.updater.state.collectAsState()
+    val updateVersion = remember(updateState) { controller.updater.availableVersion() }
     val settingsNav = remember { SettingsNav() }
     val consoleState = remember { ConsoleState() }
     val phoneState = remember { PhoneState() }
@@ -169,6 +172,7 @@ fun MainScreen(
             override fun uninstall(key: String) = controller.uninstall(key)
             override fun openSearch() = push(Screen.SEARCH)
             override fun openSettings() = push(Screen.SETTINGS)
+            override fun openUpdate() = push(Screen.UPDATE)
             override fun openConsoleApps() = push(Screen.CONSOLE_APPS)
             override fun toggleLang() = controller.toggleLang()
             override fun cycleMode(dir: Int) = controller.cycleMode(dir)
@@ -238,6 +242,7 @@ fun MainScreen(
             override fun editRaAccount() = push(Screen.RA_ACCOUNT)
             override fun openNetworkCheck() = push(Screen.NETWORK_CHECK)
             override fun openDiagnostics() = push(Screen.DIAGNOSTICS)
+            override fun openUpdate() = push(Screen.UPDATE)
         }
     }
 
@@ -259,6 +264,7 @@ fun MainScreen(
                 carouselKeys = data.settings.carouselKeys,
                 tabColors = data.settings.tabColors,
                 ra = raState,
+                update = updateVersion,
             )
         } else {
             val visibleHome = remember(data.home, appsByKey) {
@@ -289,6 +295,15 @@ fun MainScreen(
                 usageAccess = usageAccess,
                 iconPackName = remember(data.settings.iconPack) { controller.iconPackName(data.settings.iconPack) },
                 nav = settingsNav,
+                updateVersion = updateVersion,
+            )
+            Screen.UPDATE -> UpdateScreen(
+                updateState, controller.updater.currentVersion, data.settings.updateCheck, ::pop,
+                onCheck = { controller.updater.check() },
+                onInstall = controller.updater::install,
+                onPermission = controller.updater::openInstallPermission,
+                onOpenPage = controller.updater::openReleasePage,
+                onToggleAuto = controller::toggleUpdateCheck,
             )
             Screen.NETWORK_CHECK -> NetworkCheckScreen(::pop) { onEach -> controller.checkNetwork(onEach) }
             Screen.DIAGNOSTICS -> DiagnosticsScreen(

@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import kotlinx.coroutines.launch
@@ -157,6 +159,7 @@ interface SettingsActions {
     fun editRaAccount() {}
     fun openNetworkCheck() {}
     fun openDiagnostics() {}
+    fun openUpdate() {}
 }
 
 /** Заголовок раздела настроек. */
@@ -256,6 +259,8 @@ fun SettingsScreen(
     /** Название выбранного набора значков (null — обычные значки). */
     iconPackName: String? = null,
     nav: SettingsNav = remember { SettingsNav() },
+    /** Новая версия лаунчера, если уже известна. */
+    updateVersion: String? = null,
 ) {
     val s = LocalStrings.current
     val section = nav.section?.let { runCatching { SettingsSection.valueOf(it) }.getOrNull() }
@@ -274,7 +279,7 @@ fun SettingsScreen(
     ScreenFrame(title, onBack = { if (section != null) nav.section = null else onBack() }) {
         CompositionLocalProvider(LocalFocusMemory provides mem) {
             LazyColumn(Modifier.fillMaxSize(), state = mem.list) {
-                if (section == null) settingsMenu(s, nav, version)
+                if (section == null) settingsMenu(s, nav, version, updateVersion, a)
                 else settingsSection(section, s, settings, a, romsLabel, usageAccess, iconPackName)
             }
         }
@@ -283,6 +288,7 @@ fun SettingsScreen(
 
 private fun androidx.compose.foundation.lazy.LazyListScope.settingsMenu(
     s: com.retrohome.launcher.i18n.Strings, nav: SettingsNav, version: String,
+    updateVersion: String?, a: SettingsActions,
 ) {
     val entries = listOf(
         SettingsSection.GENERAL to (s.secGeneral to s.ext.menu.general),
@@ -295,6 +301,12 @@ private fun androidx.compose.foundation.lazy.LazyListScope.settingsMenu(
     for ((sec, text) in entries) item(key = sec.name) {
         FocusRow(onClick = { nav.section = sec.name }, id = "sec:" + sec.name) {
             TitleAndDesc(text.first, text.second, "›")
+        }
+    }
+    item(key = "update") {
+        FocusRow(onClick = a::openUpdate, id = "update") {
+            if (updateVersion != null) TitleAndDesc(s.ext.upd.title, s.ext.upd.available.format(updateVersion), "●")
+            else TitleAndDesc(s.ext.upd.title, s.ext.upd.current.format(version), "›")
         }
     }
     item {
@@ -990,6 +1002,103 @@ const val DIAG_RUNNING = "Загрузка сейчас: идёт"
  * Диагностика обложек и описаний: отчёт текстом, который можно отправить разработчику.
  * Отчёт разбит на абзацы-строки, чтобы его можно было листать и крестовиной.
  */
+@Composable
+fun UpdateScreen(
+    state: com.retrohome.launcher.data.UpdateState,
+    current: String,
+    autoCheck: Boolean,
+    onBack: () -> Unit,
+    onCheck: () -> Unit,
+    onInstall: (com.retrohome.launcher.data.UpdateCheck.Release) -> Unit,
+    onPermission: () -> Unit,
+    onOpenPage: (com.retrohome.launcher.data.UpdateCheck.Release?) -> Unit,
+    onToggleAuto: () -> Unit,
+) {
+    val u = LocalStrings.current.ext.upd
+    val s = LocalStrings.current
+    // Открыли экран, а проверки ещё не было — проверяем сразу
+    LaunchedEffect(Unit) { if (state == com.retrohome.launcher.data.UpdateState.Idle) onCheck() }
+    val release = when (state) {
+        is com.retrohome.launcher.data.UpdateState.Available -> state.release
+        is com.retrohome.launcher.data.UpdateState.Downloading -> state.release
+        is com.retrohome.launcher.data.UpdateState.NeedPermission -> state.release
+        is com.retrohome.launcher.data.UpdateState.Installing -> state.release
+        is com.retrohome.launcher.data.UpdateState.Failed -> state.release
+        else -> null
+    }
+    ScreenFrame(u.title, onBack) {
+        LazyColumn(Modifier.fillMaxSize()) {
+            item {
+                val status = when (state) {
+                    is com.retrohome.launcher.data.UpdateState.UpToDate -> u.upToDate.format(current)
+                    com.retrohome.launcher.data.UpdateState.Checking -> u.checking
+                    is com.retrohome.launcher.data.UpdateState.Failed -> when (state.reason) {
+                        com.retrohome.launcher.data.UpdateState.Reason.NETWORK -> u.failNetwork
+                        com.retrohome.launcher.data.UpdateState.Reason.RATE_LIMIT -> u.failRateLimit
+                        com.retrohome.launcher.data.UpdateState.Reason.NO_APK -> u.failNoApk
+                        com.retrohome.launcher.data.UpdateState.Reason.DOWNLOAD -> u.failDownload
+                        com.retrohome.launcher.data.UpdateState.Reason.SIGNATURE -> u.failSignature.format(state.detail ?: "?")
+                        com.retrohome.launcher.data.UpdateState.Reason.INSTALL -> u.failInstall + (state.detail?.let { " ($it)" } ?: "")
+                    }
+                    else -> release?.let { u.available.format(it.version) } ?: u.current.format(current)
+                }
+                Column(Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
+                    Text(u.current.format(current), color = Palette.dim, fontSize = 13.sp)
+                    Text(
+                        status, fontSize = 18.sp, fontWeight = FontWeight.Bold,
+                        color = if (state is com.retrohome.launcher.data.UpdateState.Failed) Color(0xFFFF6B6B) else Palette.text,
+                        modifier = Modifier.testTag("updateStatus"),
+                    )
+                }
+            }
+            when (state) {
+                is com.retrohome.launcher.data.UpdateState.Downloading -> item {
+                    FocusRow(onClick = {}, id = "first") {
+                        Column {
+                            TitleAndDesc(u.downloading.format((state.progress * 100).toInt()))
+                            Spacer(Modifier.height(8.dp))
+                            Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)).background(Palette.surfaceHi)) {
+                                Box(Modifier.fillMaxWidth(state.progress).fillMaxHeight().clip(RoundedCornerShape(50)).background(Palette.accent))
+                            }
+                        }
+                    }
+                }
+                is com.retrohome.launcher.data.UpdateState.Installing -> item {
+                    FocusRow(onClick = { onInstall(state.release) }, id = "first") { TitleAndDesc(u.installing, u.installingDesc) }
+                }
+                is com.retrohome.launcher.data.UpdateState.NeedPermission -> item {
+                    FocusRow(onClick = onPermission, id = "first") { TitleAndDesc(u.needPermission, u.needPermissionDesc, "›") }
+                }
+                else -> if (release != null) item {
+                    FocusRow(onClick = { onInstall(release) }, id = "first") {
+                        TitleAndDesc(u.install.format(release.version) + u.sizeMb(release.size), u.installDesc)
+                    }
+                }
+            }
+            if (state !is com.retrohome.launcher.data.UpdateState.Downloading && state !is com.retrohome.launcher.data.UpdateState.Installing) {
+                item {
+                    FocusRow(onClick = onCheck, id = if (release == null) "first" else "check") {
+                        TitleAndDesc(u.checkNow, u.checkDesc)
+                    }
+                }
+            }
+            item { ChoiceRow(u.auto, if (autoCheck) s.on else s.off, desc = u.autoDesc, id = "auto") { onToggleAuto() } }
+            item { FocusRow(onClick = { onOpenPage(release) }, id = "page") { TitleAndDesc(u.openPage, u.openPageDesc) } }
+            val notes = release?.notes?.let { com.retrohome.launcher.data.UpdateCheck.plainNotes(it) }.orEmpty()
+            if (notes.isNotEmpty()) {
+                item { Text(u.whatsNew, color = Palette.dim, fontSize = 13.sp, modifier = Modifier.padding(start = 24.dp, top = 12.dp, bottom = 4.dp)) }
+                // Каждый пункт — отдельная строка: крестовина листает по ним
+                val parts = notes.split(Regex("\n(?=• )")).filter { it.isNotBlank() }
+                items(parts.size) { i ->
+                    FocusRow(onClick = {}) {
+                        Text(parts[i].trim(), color = Palette.text, fontSize = 13.sp, lineHeight = 18.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun DiagnosticsScreen(
     onBack: () -> Unit,

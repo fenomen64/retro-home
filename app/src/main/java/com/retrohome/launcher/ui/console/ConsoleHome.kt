@@ -118,6 +118,7 @@ interface ConsoleActions {
     fun cycleSortGames(dir: Int = 1) {}
     /** Открыта панель достижений игры сайта RetroAchievements — загрузить полный список. */
     fun openAchievements(raGameId: Int) {}
+    fun openUpdate() {}
     fun cycleSfx(dir: Int = 1)
     fun cycleMusic(dir: Int = 1)
 }
@@ -202,7 +203,10 @@ fun startMenu(
     s: Strings, mode: ModeOverride, a: ConsoleActions, audio: AudioState = AudioState(), gameSort: String = "name",
     /** Открыт как приложение: режим не выбирается, он всегда консольный. */
     appMode: Boolean = false,
+    /** Вышла новая версия лаунчера — первым пунктом предлагаем обновиться. */
+    update: String? = null,
 ): List<MenuEntry> = listOfNotNull(
+    update?.let { v -> MenuEntry(s.ext.upd.menuItem.format(v)) { a.openUpdate() } },
     MenuEntry(s.search) { a.openSearch() },
     choiceEntry(s.sortGames, s.sortName(gameSort)) { a.cycleSortGames(it) },
     choiceEntry(s.sounds, s.packName(audio.sfxPack)) { a.cycleSfx(it) },
@@ -277,7 +281,10 @@ fun ConsoleHome(
     tabColors: Boolean = true,
     /** Достижения RetroAchievements (полные списки для панели). */
     ra: com.retrohome.launcher.data.RaState = com.retrohome.launcher.data.RaState(),
+    /** Новая версия лаунчера, если вышла. */
+    update: String? = null,
 ) {
+    val updateNow by rememberUpdatedState(update)
     val s = LocalStrings.current
     val gamePageNow by rememberUpdatedState(gamePage)
     val gameSortNow by rememberUpdatedState(gameSort)
@@ -307,7 +314,7 @@ fun ConsoleHome(
     }
 
     fun menuItems(): List<MenuEntry> = when (val o = state.overlay) {
-        ConsoleOverlay.Start -> startMenu(sNow, modeNow, actions, audioNow, gameSortNow, appMode)
+        ConsoleOverlay.Start -> startMenu(sNow, modeNow, actions, audioNow, gameSortNow, appMode, updateNow)
         is ConsoleOverlay.Item -> itemMenu(
             sNow, o.entry, actions, { openDescription(o.entry) }, { openDescription(o.entry, log = true) },
             { openAchievements(o.entry) },
@@ -605,7 +612,7 @@ fun ConsoleHome(
         ) {
             MenuPanel(
                 title = s.menuTitle,
-                items = startMenu(s, mode, actions, audio, gameSort, appMode),
+                items = startMenu(s, mode, actions, audio, gameSort, appMode, update),
                 selected = state.menuIndex,
                 cancelGlyph = cancelGlyph,
                 modifier = Modifier.fillMaxHeight().width(330.dp).statusBarsPadding().navigationBarsPadding(),

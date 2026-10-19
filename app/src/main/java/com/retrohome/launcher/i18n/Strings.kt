@@ -535,6 +535,36 @@ val RU = Strings(
     pickMusicDesc = "Любой аудиофайл с устройства, будет играть по кругу",
     musicVolume = "Громкость музыки",
     ext = ExtStrings(
+        upd = UpdateStrings(
+            title = "Обновление",
+            current = "Установлена версия %s",
+            upToDate = "Версия %s — самая новая",
+            available = "Доступна версия %s",
+            checking = "Проверяю…",
+            checkNow = "Проверить сейчас",
+            checkDesc = "Посмотреть последний выпуск на GitHub",
+            install = "Скачать и установить %s",
+            installDesc = "Скачается с GitHub, затем Android спросит подтверждение. Настройки, игры и обложки сохранятся",
+            downloading = "Скачивание… %d%%",
+            installing = "Установка…",
+            installingDesc = "Подтвердите в окне Android. Лаунчер перезапустится уже новым",
+            needPermission = "Разрешите установку обновлений",
+            needPermissionDesc = "Android спрашивает один раз: включите «Разрешить установку» для Retro Home и вернитесь — установка продолжится",
+            auto = "Проверять автоматически",
+            autoDesc = "Примерно раз в час заглядывать на GitHub и сообщать о новой версии",
+            whatsNew = "Что нового",
+            openPage = "Открыть страницу выпуска",
+            openPageDesc = "Скачать APK вручную в браузере",
+            failNetwork = "Не удалось связаться с GitHub — проверьте интернет",
+            failRateLimit = "GitHub временно ограничил запросы — попробуйте через час",
+            failNoApk = "В последнем выпуске нет файла APK",
+            failDownload = "Не удалось скачать файл — попробуйте ещё раз",
+            failSignature = "Файл не прошёл проверку (%s) — установка отменена",
+            failInstall = "Android не установил обновление",
+            menuItem = "Обновить до %s",
+            toast = "Retro Home: доступна версия %s — Настройки → Обновление",
+            mb = "МБ",
+        ),
         menu = MenuStrings(
             general = "Язык, режим, кнопки A/B, масштаб, главный экран",
             look = "Тема, цвет выделения, вкладки консолей, вибрация",
@@ -603,6 +633,7 @@ val RU = Strings(
         lCoversMirror = "Обложки — запасной источник (GitHub)",
         lSwitchMirror = "Игры Switch — запасной источник (nlib.cc)",
         lSwitchEu = "Обложки Switch (база Nintendo Europe)",
+        lUpdates = "Обновления лаунчера (github.com)",
         kNoDns = "Не удаётся найти сайт: нет интернета, не работает DNS или сайт заблокирован. Попробуйте другую сеть; в настройках Android проверьте «Частный DNS».",
         kTimeout = "Сайт не отвечает: соединение слишком медленное или блокируется. Попробуйте другую сеть или VPN.",
         kRefused = "Соединение отклонено: сайт недоступен из этой сети. Попробуйте другую сеть или VPN.",
@@ -881,6 +912,36 @@ val EN = Strings(
     pickMusicDesc = "Any audio file from the device, played on a loop",
     musicVolume = "Music volume",
     ext = ExtStrings(
+        upd = UpdateStrings(
+            title = "Update",
+            current = "Installed version %s",
+            upToDate = "Version %s is the latest",
+            available = "Version %s is available",
+            checking = "Checking…",
+            checkNow = "Check now",
+            checkDesc = "Look up the latest release on GitHub",
+            install = "Download and install %s",
+            installDesc = "Downloads from GitHub, then Android asks to confirm. Settings, games and covers are kept",
+            downloading = "Downloading… %d%%",
+            installing = "Installing…",
+            installingDesc = "Confirm in the Android dialog. The launcher restarts as the new version",
+            needPermission = "Allow installing updates",
+            needPermissionDesc = "Android asks once: turn on “Allow from this source” for Retro Home and come back — the install continues",
+            auto = "Check automatically",
+            autoDesc = "Look at GitHub about once an hour and tell about a new version",
+            whatsNew = "What's new",
+            openPage = "Open the release page",
+            openPageDesc = "Download the APK manually in a browser",
+            failNetwork = "Couldn't reach GitHub — check the internet",
+            failRateLimit = "GitHub is limiting requests — try again in an hour",
+            failNoApk = "The latest release has no APK file",
+            failDownload = "Download failed — try again",
+            failSignature = "The file failed the check (%s) — install cancelled",
+            failInstall = "Android didn't install the update",
+            menuItem = "Update to %s",
+            toast = "Retro Home: version %s is available — Settings → Update",
+            mb = "MB",
+        ),
         menu = MenuStrings(
             general = "Language, mode, A/B buttons, scale, home screen",
             look = "Theme, accent color, console tabs, haptics",
@@ -949,6 +1010,7 @@ val EN = Strings(
         lCoversMirror = "Covers — backup source (GitHub)",
         lSwitchMirror = "Switch games — backup source (nlib.cc)",
         lSwitchEu = "Switch covers (Nintendo Europe catalog)",
+        lUpdates = "Launcher updates (github.com)",
         kNoDns = "Can't find the site: no internet, DNS isn't working, or the site is blocked. Try another network and check Android's Private DNS setting.",
         kTimeout = "The site doesn't respond: the connection is too slow or blocked. Try another network or a VPN.",
         kRefused = "Connection refused: the site isn't reachable from this network. Try another network or a VPN.",
@@ -1034,7 +1096,42 @@ data class ExtStrings(
     val shape: ShapeStrings,
     val scale: ScaleStrings,
     val menu: MenuStrings,
+    val upd: UpdateStrings,
 )
+
+/** Обновление лаунчера. */
+data class UpdateStrings(
+    val title: String,
+    val current: String,
+    val upToDate: String,
+    val available: String,
+    val checking: String,
+    val checkNow: String,
+    val checkDesc: String,
+    val install: String,
+    val installDesc: String,
+    val downloading: String,
+    val installing: String,
+    val installingDesc: String,
+    val needPermission: String,
+    val needPermissionDesc: String,
+    val auto: String,
+    val autoDesc: String,
+    val whatsNew: String,
+    val openPage: String,
+    val openPageDesc: String,
+    val failNetwork: String,
+    val failRateLimit: String,
+    val failNoApk: String,
+    val failDownload: String,
+    val failSignature: String,
+    val failInstall: String,
+    val menuItem: String,
+    val toast: String,
+    val mb: String,
+) {
+    fun sizeMb(bytes: Long) = if (bytes <= 0) "" else " · %.1f %s".format(java.util.Locale.ROOT, bytes / 1048576.0, mb)
+}
 
 /** Разделы настроек: что в каждом. */
 data class MenuStrings(
@@ -1117,6 +1214,7 @@ data class NetStrings(
     val lCoversMirror: String,
     val lSwitchMirror: String,
     val lSwitchEu: String,
+    val lUpdates: String,
     val kNoDns: String,
     val kTimeout: String,
     val kRefused: String,
@@ -1130,7 +1228,7 @@ data class NetStrings(
     val problemHint: String,
 ) {
     fun label(id: String) = when (id) {
-        "covers" -> lCovers; "coversMirror" -> lCoversMirror; "wikiEn" -> lWikiEn; "wikiRu" -> lWikiRu; "wikidata" -> lWikidata; "switch" -> lSwitch; "switchMirror" -> lSwitchMirror; "switchEu" -> lSwitchEu; else -> lRa
+        "covers" -> lCovers; "coversMirror" -> lCoversMirror; "wikiEn" -> lWikiEn; "wikiRu" -> lWikiRu; "wikidata" -> lWikidata; "switch" -> lSwitch; "switchMirror" -> lSwitchMirror; "switchEu" -> lSwitchEu; "updates" -> lUpdates; else -> lRa
     }
 
     fun explain(kind: com.retrohome.launcher.data.NetworkCheck.Kind) = when (kind) {

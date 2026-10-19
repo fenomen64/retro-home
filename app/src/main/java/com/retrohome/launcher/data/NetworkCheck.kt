@@ -25,6 +25,8 @@ object NetworkCheck {
         Target("switchMirror", "https://api.nlib.cc/nx/0100F2C0115B6000?fields=name"),
         // Не главная страница (она закрыта защитой от роботов), а тот же API, что использует лаунчер.
         // Без ключа он отвечает «нужен ключ» — значит, сайт доступен
+        // Обновления лаунчера: страница релизов на GitHub (оттуда же скачивается APK)
+        Target("updates", "https://github.com/fenomen64/retro-home/releases"),
         Target("ra", "https://retroachievements.org/API/API_GetConsoleIDs.php", unauthorizedIsOk = true),
     )
 

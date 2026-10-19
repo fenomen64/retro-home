@@ -202,6 +202,7 @@ open class MainActivity : ComponentActivity() {
         handler.removeCallbacks(restoreOrientation)
         handler.postDelayed(restoreOrientation, 700)
         controller.onLauncherResumed()
+        controller.onResumeUpdates()
         music.setResumed(true)
         // Форму значков могли сменить в настройках системы, пока лаунчер был в фоне
         if (controller.apps.refreshShape()) shapeVersion++

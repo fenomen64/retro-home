@@ -401,6 +401,21 @@ class LauncherController(
         d.copy(settings = d.settings.copy(hiddenTabs = if (id in h) h - id else h + id))
     }
 
+    // --- Обновление лаунчера ---
+    val updater = com.retrohome.launcher.data.Updater(context, scope)
+
+    /** При возвращении на главный экран: тихая проверка (если включена) и продолжение установки после разрешения. */
+    fun onResumeUpdates() {
+        updater.onResume()
+        if (!store.data.value.settings.updateCheck) return
+        updater.autoCheck { v ->
+            val s = if (store.data.value.settings.lang == com.retrohome.launcher.data.Lang.RU) com.retrohome.launcher.i18n.RU else com.retrohome.launcher.i18n.EN
+            android.widget.Toast.makeText(context, s.ext.upd.toast.format(v), android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
+
+    fun toggleUpdateCheck() = store.update { d -> d.copy(settings = d.settings.copy(updateCheck = !d.settings.updateCheck)) }
+
     fun cycleCarouselKeys(dir: Int = 1) = store.update { d ->
         d.copy(settings = d.settings.copy(carouselKeys = listOf("dpad", "triggers", "both").cycle(d.settings.carouselKeys, dir)))
     }
