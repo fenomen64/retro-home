@@ -349,19 +349,49 @@ object Launchers {
         }
 
     /** Установленный пакет для рецепта, если он есть. */
-    fun installedPackage(recipe: LaunchRecipe, installed: Set<String>): String? {
-        recipe.packages.firstOrNull { it in installed }?.let { return it }
-        val prefix = recipe.packagePrefix ?: return null
-        return installed.filter { it.startsWith(prefix) }.sorted().firstOrNull()
+    fun installedPackage(recipe: LaunchRecipe, installed: Set<String>): String? = installedPackages(recipe, installed).firstOrNull()
+
+    /** Все установленные пакеты рецепта — в порядке предпочтения. */
+    fun installedPackages(recipe: LaunchRecipe, installed: Set<String>): List<String> {
+        val listed = recipe.packages.filter { it in installed }
+        val byPrefix = recipe.packagePrefix?.let { p -> installed.filter { it.startsWith(p) }.sorted() }.orEmpty()
+        return (listed + byPrefix).distinct()
     }
 
+    /**
+     * Стоят несколько сборок одного эмулятора (Eden, Eden Legacy, ночная…) — каждая отдельным пунктом
+     * под своим названием. Первая сохраняет id рецепта (прежний выбор не сбивается), остальные — «id@пакет».
+     */
+    fun variants(recipe: LaunchRecipe, installed: Set<String>, labels: Map<String, String> = emptyMap()): List<LaunchRecipe> {
+        val pkgs = installedPackages(recipe, installed)
+        if (pkgs.size <= 1) return if (pkgs.isEmpty()) emptyList() else listOf(recipe)
+        return pkgs.mapIndexed { i, p ->
+            recipe.copy(
+                id = if (i == 0) recipe.id else "${recipe.id}@$p",
+                name = labels[p] ?: "${recipe.name} ($p)",
+                packages = listOf(p),
+                packagePrefix = null,
+            )
+        }
+    }
+
+    /** Рецепт для сборки под незнакомым пакетом, узнанной по экрану эмуляции (см. SpoofedEmulators). */
+    fun forSignature(recipeId: String, pkg: String, label: String): LaunchRecipe? =
+        all.firstOrNull { it.id == recipeId }?.copy(id = "$recipeId@$pkg", name = label, packages = listOf(pkg), packagePrefix = null)
+
     /** Чем можно запускать игры системы на этом устройстве — в порядке предпочтения. */
-    fun available(system: GameSystem, installed: Set<String>, extra: List<LaunchRecipe> = emptyList()): List<LaunchRecipe> =
-        (all + extra).filter { system in it.systems && installedPackage(it, installed) != null }
+    fun available(
+        system: GameSystem, installed: Set<String>, extra: List<LaunchRecipe> = emptyList(),
+        labels: Map<String, String> = emptyMap(),
+    ): List<LaunchRecipe> =
+        (all + extra).filter { system in it.systems }.flatMap { variants(it, installed, labels) }.distinctBy { it.id }
 
     /** Эмулятор для системы: выбранный вручную, иначе первый подходящий установленный. */
-    fun choose(system: GameSystem, installed: Set<String>, chosenId: String?, extra: List<LaunchRecipe> = emptyList()): LaunchRecipe? {
-        val options = available(system, installed, extra)
+    fun choose(
+        system: GameSystem, installed: Set<String>, chosenId: String?, extra: List<LaunchRecipe> = emptyList(),
+        labels: Map<String, String> = emptyMap(),
+    ): LaunchRecipe? {
+        val options = available(system, installed, extra, labels)
         return options.firstOrNull { it.id == chosenId } ?: options.firstOrNull()
     }
 }

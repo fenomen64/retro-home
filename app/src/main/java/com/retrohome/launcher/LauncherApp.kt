@@ -194,10 +194,13 @@ class LauncherController(
         .filter { !com.retrohome.launcher.data.SpoofedEmulators.isSpoofable(it.packageName) || it.emulator != null }
         .map { it.packageName }.toSet()
 
-    fun runnerFor(system: GameSystem): LaunchRecipe? =
-        Launchers.choose(system, installedPackages(), data.systemEmulator[system.name], autoRecipes())
+    /** Названия приложений — чтобы несколько сборок одного эмулятора различались в списке. */
+    private fun appLabels(): Map<String, String> = apps.apps.value.associate { it.packageName to it.label }
 
-    fun runnerOptions(system: GameSystem): List<LaunchRecipe> = Launchers.available(system, installedPackages(), autoRecipes())
+    fun runnerFor(system: GameSystem): LaunchRecipe? =
+        Launchers.choose(system, installedPackages(), data.systemEmulator[system.name], autoRecipes(), appLabels())
+
+    fun runnerOptions(system: GameSystem): List<LaunchRecipe> = Launchers.available(system, installedPackages(), autoRecipes(), appLabels())
 
     /**
      * Запуск для эмуляторов без готового рецепта (новые, вроде только что установленного):
@@ -211,6 +214,10 @@ class LauncherController(
         val recipes = list.filter { it.emulator != null && !Launchers.knows(it.packageName) }
             .distinctBy { it.packageName }
             .mapNotNull { a ->
+                // Сборка известного эмулятора под новым пакетом — запускаем его родным способом
+                com.retrohome.launcher.data.SpoofedEmulators.signatureOf(context, a.packageName)?.let { sig ->
+                    Launchers.forSignature(sig.recipeId, a.packageName, a.label)?.let { return@mapNotNull it }
+                }
                 val (activity, withType) = com.retrohome.launcher.data.FileOpeners.activityOf(context, a.packageName) ?: return@mapNotNull null
                 val def = a.emulator!!
                 Launchers.generic(a.packageName, if (def.id.startsWith(com.retrohome.launcher.data.Emulators.AUTO_PREFIX)) a.label else def.name,
@@ -310,7 +317,7 @@ class LauncherController(
                 // Доступ ко всей папке выдать не удалось — запускаем только с самим файлом игры
                 context.startActivity(recipe.build(ctx.copy(tree = null)))
             }
-            if (recipe.id == "lemuroid" && com.retrohome.launcher.data.Lemuroid.idFor(titles) == null) {
+            if (recipe.id.substringBefore("@") == "lemuroid" && com.retrohome.launcher.data.Lemuroid.idFor(titles) == null) {
                 // Lemuroid открылся на своём списке игр — подсказать, как запускать сразу
                 val home = com.retrohome.launcher.data.Lemuroid.canReceiveShortcuts(context)
                 toast(if (home) strings.ext.emu.lemuroidHint else strings.ext.emu.lemuroidHintNotHome)
@@ -624,6 +631,37 @@ class LauncherController(
                 "  ${sys.name}: ${list.size} · обложки ${ms.count { it?.cover != null }} · описания ${ms.count { it?.descEn != null || it?.descRu != null }}" +
                     " · не искали ${ms.count { it == null }} · ждут повтора ${ms.count { it != null && it.retryAt > now }}"
             )
+        }
+        // Эмуляторы: что нашлось на устройстве и чем запускается каждая консоль
+        sb.appendLine()
+        val emus = apps.apps.value.filter { it.emulator != null }.distinctBy { it.packageName }
+        sb.appendLine("Эмуляторы на устройстве (${emus.size}):")
+        emus.forEach { a ->
+            val how = when {
+                com.retrohome.launcher.data.SpoofedEmulators.isSpoofable(a.packageName) -> "под чужим пакетом"
+                Launchers.knows(a.packageName) -> "известный"
+                com.retrohome.launcher.data.SpoofedEmulators.signatureOf(context, a.packageName) != null -> "узнан по экрану эмуляции"
+                else -> "по открытию файлов"
+            }
+            sb.appendLine("  ${a.label} — ${a.packageName} → ${a.emulator!!.name} ($how)")
+        }
+        // Похожие на эмуляторы, но не распознанные — чтобы было видно, что добавить
+        val looksLike = Regex("(?i)emu|eden|yuzu|citron|sudachi|ryujinx|dolphin|ppsspp|retroarch|vita3k|aethersx|nethersx|armsx|duckstation|melonds|drastic|azahar|lime3ds|citra|mupen|flycast|redream")
+        apps.apps.value.filter { it.emulator == null && (looksLike.containsMatchIn(it.packageName) || looksLike.containsMatchIn(it.label)) }
+            .distinctBy { it.packageName }.take(15).let { odd ->
+                if (odd.isNotEmpty()) sb.appendLine("  не распознаны: " + odd.joinToString(", ") { "${it.label} (${it.packageName})" })
+            }
+        val systems = scan.games.map { it.system }.distinct().sortedBy { it.name }
+        if (systems.isNotEmpty()) {
+            sb.appendLine("Чем запускаются игры:")
+            systems.forEach { sys ->
+                val options = runnerOptions(sys)
+                val chosen = runnerFor(sys)
+                sb.appendLine("  ${sys.name}: " + if (options.isEmpty()) "НЕТ ЭМУЛЯТОРА" else options.joinToString(", ") { r ->
+                    val pkg = Launchers.installedPackage(r, installedPackages())
+                    (if (r.id == chosen?.id) "▶ " else "") + "${r.name} [$pkg]"
+                })
+            }
         }
         val idx = metas.indexInfo()
         if (idx.isNotEmpty()) {

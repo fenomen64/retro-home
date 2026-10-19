@@ -70,4 +70,38 @@ class LaunchAccessTest {
         assertEquals("switch", SpoofedEmulators.detect(app, SpoofedEmulators.GENSHIN)!!.id)
         assertNull(SpoofedEmulators.detect(app, "com.other.game"))
     }
+
+    @Test fun everyInstalledEdenBuildIsSeparateChoice() {
+        // Стоят обычный Eden и Eden Legacy Nightly — оба в списке, каждый под своим названием
+        val installed = setOf("dev.eden.eden_emulator", "dev.legacy.eden_emulator")
+        val labels = mapOf("dev.eden.eden_emulator" to "Eden", "dev.legacy.eden_emulator" to "Eden Legacy Nightly")
+        val options = Launchers.available(GameSystem.SWITCH, installed, labels = labels)
+        assertEquals(listOf("Eden", "Eden Legacy Nightly"), options.map { it.name })
+        // Прежний выбор «eden» по-прежнему означает основную сборку
+        assertEquals("eden", options.first().id)
+        val legacy = Launchers.choose(GameSystem.SWITCH, installed, "eden@dev.legacy.eden_emulator", labels = labels)!!
+        assertEquals("dev.legacy.eden_emulator", Launchers.installedPackage(legacy, installed))
+        // Запуск — родным способом Eden, но в выбранной сборке
+        val uri = Uri.parse("content://roms/game.nsp")
+        val i = legacy.build(LaunchContext("dev.legacy.eden_emulator", legacy.activities.first(), uri, "/roms/game.nsp", GameSystem.SWITCH))
+        assertEquals("dev.legacy.eden_emulator", i.component!!.packageName)
+        assertEquals("android.nfc.action.TECH_DISCOVERED", i.action)
+        // Одна сборка — один пункт, как раньше
+        assertEquals(listOf("Eden / Yuzu"), Launchers.available(GameSystem.SWITCH, setOf("dev.legacy.eden_emulator")).map { it.name })
+        assertEquals("switch", Emulators.match("dev.legacy.eden_emulator", "Eden Legacy")!!.id)
+    }
+
+    @Test fun edenUnderUnknownPackageIsFoundByItsEmulationScreen() {
+        val app = RuntimeEnvironment.getApplication()
+        val pkg = "org.eden.legacy.nightly"
+        assertNull(SpoofedEmulators.detectUnknown(app, pkg))
+        shadowOf(app.packageManager).addActivityIfNotPresent(ComponentName(pkg, "org.yuzu.yuzu_emu.activities.EmulationActivity"))
+        assertEquals("switch", SpoofedEmulators.detectUnknown(app, pkg)!!.id)
+        val sig = SpoofedEmulators.signatureOf(app, pkg)!!
+        val r = Launchers.forSignature(sig.recipeId, pkg, "Eden Legacy Nightly")!!
+        assertEquals("eden@$pkg", r.id)
+        assertEquals(listOf(r.id), Launchers.available(GameSystem.SWITCH, setOf(pkg), listOf(r)).map { it.id })
+        // Обычное приложение без экрана эмуляции — не эмулятор
+        assertNull(SpoofedEmulators.detectUnknown(app, "com.some.app"))
+    }
 }

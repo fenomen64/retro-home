@@ -77,7 +77,7 @@ object Emulators {
         ),
         EmulatorDef(
             "switch", "Eden / Yuzu", listOf(GameSystem.SWITCH),
-            listOf("dev.eden.", "org.yuzu.", "org.suyu.", "org.sudachi.", "org.citron.", "emu.skyline"),
+            listOf("dev.eden.", "dev.legacy.eden", "org.yuzu.", "org.suyu.", "org.sudachi.", "org.citron.", "emu.skyline"),
             listOf("eden_emu", "eden emulator", "yuzu", "suyu", "sudachi", "citron", "strato", "skyline"),
         ),
         EmulatorDef("dolphin", "Dolphin", listOf(GameSystem.GC, GameSystem.WII), listOf("org.dolphinemu."), listOf("dolphin")),
