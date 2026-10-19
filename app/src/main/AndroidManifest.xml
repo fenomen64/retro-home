@@ -34,6 +34,15 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="com.teslacoilsw.launcher.THEME" />
         </intent>
+        <!-- Какие приложения открывают файлы игр: так опознаются новые эмуляторы -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="content" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="content" android:mimeType="*/*" />
+        </intent>
     </queries>
 
     <uses-permission android:name="android.permission.SET_WALLPAPER" />

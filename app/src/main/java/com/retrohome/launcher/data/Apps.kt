@@ -78,6 +78,8 @@ class AppRepository(private val context: Context, private val scope: CoroutineSc
         }
         scope.launch(Dispatchers.IO) {
             val own = context.packageName
+            // Кто умеет открывать файлы игр — так опознаются эмуляторы, которых нет в списке известных
+            val openers = FileOpeners.packages(context)
             val list = launcherApps.getActivityList(null, user)
                 .filter { it.componentName.packageName != own }
                 .map { info ->
@@ -91,7 +93,8 @@ class AppRepository(private val context: Context, private val scope: CoroutineSc
                         packageName = info.componentName.packageName,
                         label = label,
                         isGame = isGame,
-                        emulator = Emulators.match(info.componentName.packageName, label),
+                        emulator = Emulators.match(info.componentName.packageName, label)
+                            ?: Emulators.guess(info.componentName.packageName, label, info.componentName.packageName in openers),
                     )
                 }
                 .sortedBy { it.label.lowercase() }
@@ -181,4 +184,31 @@ class AppRepository(private val context: Context, private val scope: CoroutineSc
             if (pkg == null || pkg == "android") null else all.firstOrNull { it.packageName == pkg }?.key
         }.distinct()
     }
+}
+
+/**
+ * Какие приложения открывают файлы по ссылке content:// («Открыть с помощью…»).
+ * Эмуляторы объявляют это по-разному: с типом файла или только по адресу — проверяются оба варианта.
+ */
+object FileOpeners {
+    private val probe = android.net.Uri.parse("content://com.retrohome.probe/roms/game.bin")
+
+    private fun intents(pkg: String? = null): List<Pair<Intent, Boolean>> = listOf(
+        Intent(Intent.ACTION_VIEW).setData(probe) to false,
+        Intent(Intent.ACTION_VIEW).setDataAndType(probe, "application/octet-stream") to true,
+    ).onEach { (i, _) -> if (pkg != null) i.setPackage(pkg) }
+
+    /** Все пакеты, которые умеют открывать файлы. */
+    fun packages(context: android.content.Context): Set<String> = runCatching {
+        val pm = context.packageManager
+        intents().flatMap { (i, _) -> pm.queryIntentActivities(i, 0).map { it.activityInfo.packageName } }.toSet()
+    }.getOrDefault(emptySet())
+
+    /** Активити пакета, которая открывает файлы, и как она это объявила (с типом файла или без). */
+    fun activityOf(context: android.content.Context, pkg: String): Pair<String, Boolean>? = runCatching {
+        val pm = context.packageManager
+        intents(pkg).firstNotNullOfOrNull { (i, withType) ->
+            pm.queryIntentActivities(i, 0).firstOrNull()?.activityInfo?.name?.let { it to withType }
+        }
+    }.getOrNull()
 }

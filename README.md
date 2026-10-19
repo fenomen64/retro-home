@@ -21,7 +21,7 @@
 
 ### Консольный режим (горизонтально)
 - **Вкладки по консолям:** лаунчер сам находит игры в папке ROMs и раскладывает их по системам: PS1, PS2, PSP, GameCube, Wii, Switch, 3DS, DS, GBA, SNES, N64, Mega Drive, Dreamcast и другие.
-- **Запуск в нужном эмуляторе одной кнопкой.** Лаунчер распознаёт RetroArch, DuckStation, NetherSX2/AetherSX2, PPSSPP, Dolphin, Citra/Azahar, Eden/Yuzu, melonDS, DraStic, Flycast, Redream, Mupen64Plus, Lemuroid, My Boy!, Pizza Boy, Vita3K, ScummVM, JoiPlay, MAME4droid и другие. Для каждой консоли эмулятор можно выбрать вручную.
+- **Запуск в нужном эмуляторе одной кнопкой.** Лаунчер распознаёт RetroArch, DuckStation, ARMSX2, NetherSX2/AetherSX2, PPSSPP, Dolphin, Citra/Azahar, Eden/Yuzu, melonDS, DraStic, Flycast, Redream, Mupen64Plus, Lemuroid, My Boy!, Pizza Boy, Vita3K, ScummVM, JoiPlay, MAME4droid и другие. Эмуляторы, которых нет в списке, подхватываются автоматически: лаунчер определяет консоль по названию и запускает игры в них напрямую. Для каждой консоли эмулятор можно выбрать вручную.
 - **Обложки и снимки из игр** из открытой базы libretro-thumbnails. Для Switch — свои обложки.
 - **Описания, жанр, разработчик и год** из Википедии и Викиданных на русском и английском. Лаунчер учитывает консоль, поэтому ремейк не попадёт вместо оригинала.
 - **Страница игры:** описание, факты, время в игре, выбор диска для многодисковых игр.
@@ -102,7 +102,7 @@ cd retro-home
 Built for the Retroid Pocket G2, but it works on any device with Android 10+: other handhelds (AYN Odin, Anbernic, Retroid Pocket 4/5/Mini…), tablets and phones with a controller.
 
 ### Features
-- **Console mode:** tabs per system built automatically from your ROMs folder; one-button launch in the right emulator (RetroArch, DuckStation, NetherSX2/AetherSX2, PPSSPP, Dolphin, Citra/Azahar, Eden/Yuzu, melonDS, DraStic, Flycast, Redream, Lemuroid, Vita3K, ScummVM and more); box art and in-game snaps from libretro-thumbnails; descriptions, genre, developer and year from Wikipedia/Wikidata (in Russian and English, matched to the right console); a game page with playtime and disc selection; **RetroAchievements** progress and full achievement lists; the last-played game and favorites on the home tab; console-styled button glyphs, haptics, UI sounds and music; 4 themes and 8 accent colors.
+- **Console mode:** tabs per system built automatically from your ROMs folder; one-button launch in the right emulator (RetroArch, DuckStation, ARMSX2, NetherSX2/AetherSX2, PPSSPP, Dolphin, Citra/Azahar, Eden/Yuzu, melonDS, DraStic, Flycast, Redream, Lemuroid, Vita3K, ScummVM and more; unknown emulators are detected automatically by name and file support); box art and in-game snaps from libretro-thumbnails; descriptions, genre, developer and year from Wikipedia/Wikidata (in Russian and English, matched to the right console); a game page with playtime and disc selection; **RetroAchievements** progress and full achievement lists; the last-played game and favorites on the home tab; console-styled button glyphs, haptics, UI sounds and music; 4 themes and 8 accent colors.
 - **Phone mode:** home screen with folders and dock, app drawer with search, Android widgets, gestures, icon packs.
 - The UI is available in Russian and English.
 

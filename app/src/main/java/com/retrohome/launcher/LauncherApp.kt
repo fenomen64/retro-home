@@ -182,9 +182,30 @@ class LauncherController(
     private fun installedPackages(): Set<String> = apps.apps.value.map { it.packageName }.toSet()
 
     fun runnerFor(system: GameSystem): LaunchRecipe? =
-        Launchers.choose(system, installedPackages(), data.systemEmulator[system.name])
+        Launchers.choose(system, installedPackages(), data.systemEmulator[system.name], autoRecipes())
 
-    fun runnerOptions(system: GameSystem): List<LaunchRecipe> = Launchers.available(system, installedPackages())
+    fun runnerOptions(system: GameSystem): List<LaunchRecipe> = Launchers.available(system, installedPackages(), autoRecipes())
+
+    /**
+     * Запуск для эмуляторов без готового рецепта (новые, вроде только что установленного):
+     * консоль известна, а игру им можно передать обычным «открыть файл». Пересчитывается при смене приложений.
+     */
+    private var autoCache: Pair<List<com.retrohome.launcher.data.AppInfo>, List<LaunchRecipe>>? = null
+
+    private fun autoRecipes(): List<LaunchRecipe> {
+        val list = apps.apps.value
+        autoCache?.takeIf { it.first === list }?.let { return it.second }
+        val recipes = list.filter { it.emulator != null && !Launchers.knows(it.packageName) }
+            .distinctBy { it.packageName }
+            .mapNotNull { a ->
+                val (activity, withType) = com.retrohome.launcher.data.FileOpeners.activityOf(context, a.packageName) ?: return@mapNotNull null
+                val def = a.emulator!!
+                Launchers.generic(a.packageName, if (def.id.startsWith(com.retrohome.launcher.data.Emulators.AUTO_PREFIX)) a.label else def.name,
+                    def.systems.toSet(), activity, withType)
+            }
+        autoCache = list to recipes
+        return recipes
+    }
 
     /** Переключить эмулятор для системы на следующий (dir = 1) или предыдущий (dir = -1) из установленных. */
     fun cycleRunner(system: GameSystem, dir: Int = 1) {

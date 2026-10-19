@@ -66,6 +66,7 @@ object Emulators {
             listOf("com.swordfish.lemuroid"), listOf("lemuroid"), multi = true,
         ),
         EmulatorDef("ppsspp", "PPSSPP", listOf(GameSystem.PSP), listOf("org.ppsspp."), listOf("ppsspp")),
+        EmulatorDef("armsx2", "ARMSX2", listOf(GameSystem.PS2), listOf("com.armsx2"), listOf("armsx2")),
         EmulatorDef(
             "sx2", "NetherSX2 / AetherSX2", listOf(GameSystem.PS2),
             listOf("xyz.aethersx2", "net.pcsx2"), listOf("nethersx2", "aethersx2", "pcsx2", "sx2"),
@@ -105,6 +106,62 @@ object Emulators {
         EmulatorDef("mame", "MAME4droid", listOf(GameSystem.ARCADE), listOf("com.seleuco.mame4"), listOf("mame4droid")),
         EmulatorDef("scummvm", "ScummVM", listOf(GameSystem.SCUMMVM), listOf("org.scummvm."), listOf("scummvm")),
     )
+
+    /** id эмуляторов, опознанных по названию (нет в списке известных). */
+    const val AUTO_PREFIX = "auto:"
+
+    /**
+     * Слова в названии или пакете, по которым понятно, для какой консоли эмулятор.
+     * Порядок важен: сначала более точные («Wii U» раньше «Wii», «PS2» раньше «PS1»).
+     */
+    private val systemWords: List<Pair<GameSystem, List<String>>> = listOf(
+        GameSystem.PS2 to listOf("ps2", "pcsx2", "sx2", "playstation 2", "playstation2"),
+        GameSystem.PS3 to listOf("ps3", "rpcs3", "playstation 3"),
+        GameSystem.VITA to listOf("vita", "psvita", "ps vita"),
+        GameSystem.PSP to listOf("psp", "playstation portable"),
+        GameSystem.PS1 to listOf("ps1", "psx", "psone", "playstation 1"),
+        GameSystem.WIIU to listOf("wii u", "wiiu"),
+        GameSystem.WII to listOf("wii"),
+        GameSystem.GC to listOf("gamecube", "game cube"),
+        GameSystem.SWITCH to listOf("switch", "nintendo switch"),
+        GameSystem.N3DS to listOf("3ds", "nintendo 3ds"),
+        GameSystem.NDS to listOf("nds", "nintendo ds"),
+        GameSystem.N64 to listOf("n64", "nintendo 64"),
+        GameSystem.GBA to listOf("gba", "game boy advance", "gameboy advance"),
+        GameSystem.GBC to listOf("gbc", "game boy color", "gameboy color"),
+        GameSystem.GB to listOf("game boy", "gameboy"),
+        GameSystem.SNES to listOf("snes", "super nintendo", "super famicom"),
+        GameSystem.NES to listOf("nes", "famicom", "dendy"),
+        GameSystem.MD to listOf("genesis", "mega drive", "megadrive"),
+        GameSystem.SMS to listOf("master system"),
+        GameSystem.GG to listOf("game gear", "gamegear"),
+        GameSystem.SATURN to listOf("saturn"),
+        GameSystem.DC to listOf("dreamcast"),
+        GameSystem.PCE to listOf("pc engine", "pcengine", "turbografx"),
+        GameSystem.ARCADE to listOf("mame", "arcade"),
+    )
+
+    /** Для каких консолей эмулятор — по словам в названии и пакете (пусто — непонятно). */
+    fun guessSystems(packageName: String, label: String): List<GameSystem> {
+        // «ps2emu» → «ps2 emu»: приставка «emu» часто приклеена к названию консоли
+        val text = "${packageName.lowercase().replace('.', ' ').replace('_', ' ')} ${label.lowercase()}".replace("emu", " emu")
+        val found = systemWords.filter { (_, words) -> words.any { keywordHit(text, it) } }.map { it.first }
+        // «Wii U» — не «Wii», «Game Boy Advance/Color» — не просто «Game Boy»
+        return found.filterNot { s ->
+            (s == GameSystem.WII && GameSystem.WIIU in found && !keywordHit(text.replace("wii u", "").replace("wiiu", ""), "wii")) ||
+                (s == GameSystem.GB && (GameSystem.GBA in found || GameSystem.GBC in found))
+        }
+    }
+
+    /**
+     * Эмулятор, которого нет в списке известных: консоль понятна по названию, и приложение
+     * умеет открывать файлы (opensFiles) — значит, это не просто игра с похожим названием.
+     */
+    fun guess(packageName: String, label: String, opensFiles: Boolean): EmulatorDef? {
+        if (!opensFiles) return null
+        val systems = guessSystems(packageName, label).takeIf { it.isNotEmpty() } ?: return null
+        return EmulatorDef(AUTO_PREFIX + packageName, label, systems, listOf(packageName), multi = systems.size > 3)
+    }
 
     /** Подобрать эмулятор по пакету и названию приложения. */
     fun match(packageName: String, label: String): EmulatorDef? {

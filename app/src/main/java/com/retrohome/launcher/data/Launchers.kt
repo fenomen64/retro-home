@@ -91,6 +91,12 @@ object Launchers {
             }
         },
         LaunchRecipe(
+            // Игра передаётся обычным «открыть файл» со ссылкой; Main разбирает data, а запасные — extras
+            "armsx2", "ARMSX2", setOf(GameSystem.PS2),
+            packagePrefix = "com.armsx2",
+            activities = listOf("com.armsx2.Main", "com.armsx2.BootSplashActivity"),
+        ) { c -> base(c, Intent.ACTION_VIEW).setData(c.uri).putExtra("path", c.uri.toString()).grantUri(c.uri) },
+        LaunchRecipe(
             "sx2", "NetherSX2 / AetherSX2", setOf(GameSystem.PS2),
             packagePrefix = "xyz.aethersx2",
             activities = listOf("xyz.aethersx2.android.EmulationActivity"),
@@ -195,6 +201,23 @@ object Launchers {
 
     fun byId(id: String) = all.firstOrNull { it.id == id }
 
+    /** Есть ли для пакета готовый рецепт запуска. */
+    fun knows(pkg: String): Boolean = all.any { r -> pkg in r.packages || r.packagePrefix?.let { pkg.startsWith(it) } == true }
+
+    /**
+     * Запуск для эмулятора без готового рецепта: обычное «открыть файл» в той его активити,
+     * которая, по словам самого приложения, открывает файлы. withType — так она объявила
+     * (с типом файла или без: у части эмуляторов фильтр только по адресу).
+     */
+    fun generic(pkg: String, name: String, systems: Set<GameSystem>, activity: String, withType: Boolean): LaunchRecipe =
+        LaunchRecipe(Emulators.AUTO_PREFIX + pkg, name, systems, packages = listOf(pkg), activities = listOf(activity)) { c ->
+            base(c, Intent.ACTION_VIEW).apply {
+                addCategory(Intent.CATEGORY_DEFAULT)
+                if (withType) setDataAndType(c.uri, "application/octet-stream") else setData(c.uri)
+                putExtra(Intent.EXTRA_STREAM, c.uri)
+            }.grantUri(c.uri)
+        }
+
     /** Установленный пакет для рецепта, если он есть. */
     fun installedPackage(recipe: LaunchRecipe, installed: Set<String>): String? {
         recipe.packages.firstOrNull { it in installed }?.let { return it }
@@ -203,12 +226,12 @@ object Launchers {
     }
 
     /** Чем можно запускать игры системы на этом устройстве — в порядке предпочтения. */
-    fun available(system: GameSystem, installed: Set<String>): List<LaunchRecipe> =
-        all.filter { system in it.systems && installedPackage(it, installed) != null }
+    fun available(system: GameSystem, installed: Set<String>, extra: List<LaunchRecipe> = emptyList()): List<LaunchRecipe> =
+        (all + extra).filter { system in it.systems && installedPackage(it, installed) != null }
 
     /** Эмулятор для системы: выбранный вручную, иначе первый подходящий установленный. */
-    fun choose(system: GameSystem, installed: Set<String>, chosenId: String?): LaunchRecipe? {
-        val options = available(system, installed)
+    fun choose(system: GameSystem, installed: Set<String>, chosenId: String?, extra: List<LaunchRecipe> = emptyList()): LaunchRecipe? {
+        val options = available(system, installed, extra)
         return options.firstOrNull { it.id == chosenId } ?: options.firstOrNull()
     }
 }
