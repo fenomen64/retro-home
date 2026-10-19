@@ -119,6 +119,29 @@ class AppRepository(private val context: Context, private val scope: CoroutineSc
             synchronized(iconCache) { iconCache.evictAll() }
         }
 
+    /** Форма значков: id из [IconShapes.ids]. */
+    @Volatile var iconShape: String = IconShapes.SYSTEM
+        set(value) {
+            if (field == value) return
+            field = value
+            refreshShape()
+        }
+
+    /** Текущая маска (для «как в системе» — какая сейчас задана в системе). */
+    @Volatile private var mask: String? = IconShapes.maskFor(IconShapes.SYSTEM)
+
+    /**
+     * Перечитать форму: в системе её могли поменять, пока лаунчер был в фоне.
+     * true — форма изменилась (значки нужно перерисовать).
+     */
+    fun refreshShape(): Boolean {
+        val m = IconShapes.maskFor(iconShape)
+        if (m == mask) return false
+        mask = m
+        synchronized(iconCache) { iconCache.evictAll() }
+        return true
+    }
+
     fun peekIcon(key: String, sizePx: Int): Bitmap? = synchronized(iconCache) { iconCache.get("$key@$sizePx") }
 
     /** Иконка нужного размера в пикселях; вызывать не на главном потоке. */
@@ -131,7 +154,7 @@ class AppRepository(private val context: Context, private val scope: CoroutineSc
         val dpi = context.resources.displayMetrics.densityDpi
         val pack = iconPack
         val themed = pack?.let { runCatching { iconPacks.icon(it, key, { info.getIcon(dpi) }, sizePx) }.getOrNull() }
-        val bmp = themed ?: (info.getIcon(dpi) ?: return null).toBitmap(sizePx, sizePx)
+        val bmp = themed ?: IconShapes.render(info.getIcon(dpi) ?: return null, sizePx, mask)
         synchronized(iconCache) { iconCache.put(cacheKey, bmp) }
         return bmp
     }

@@ -252,6 +252,8 @@ data class Strings(
     val emu: EmuStrings,
     /** Диагностика загрузки обложек и описаний. */
     val diag: DiagStrings,
+    /** Форма значков приложений. */
+    val shape: ShapeStrings,
 ) {
     val langName: String get() = if (lang == Lang.RU) "Русский" else "English"
 
@@ -536,6 +538,17 @@ val RU = Strings(
     pickMusic = "Выбрать свою мелодию",
     pickMusicDesc = "Любой аудиофайл с устройства, будет играть по кругу",
     musicVolume = "Громкость музыки",
+    shape = ShapeStrings(
+        title = "Форма значков",
+        desc = "«Как в системе» — по настройке Android; если в системе форма не меняется, выберите здесь",
+        system = "Как в системе",
+        circle = "Круг",
+        squircle = "Сквиркл",
+        rounded = "Скруглённый квадрат",
+        square = "Квадрат",
+        teardrop = "Капля",
+        none = "Без обрезки",
+    ),
     diag = DiagStrings(
         title = "Диагностика обложек и описаний",
         desc = "Отчёт, почему у игр нет обложек или описаний",
@@ -848,6 +861,17 @@ val EN = Strings(
     pickMusic = "Choose your own track",
     pickMusicDesc = "Any audio file from the device, played on a loop",
     musicVolume = "Music volume",
+    shape = ShapeStrings(
+        title = "Icon shape",
+        desc = "\"System\" follows the Android setting; if the system shape doesn't change, pick one here",
+        system = "System",
+        circle = "Circle",
+        squircle = "Squircle",
+        rounded = "Rounded square",
+        square = "Square",
+        teardrop = "Teardrop",
+        none = "Don't crop",
+    ),
     diag = DiagStrings(
         title = "Covers and descriptions diagnostics",
         desc = "A report on why games have no covers or descriptions",
@@ -960,6 +984,24 @@ data class RaStrings(
     val raNet: String,
     val raRemove: String,
 )
+
+/** Форма значков. */
+data class ShapeStrings(
+    val title: String,
+    val desc: String,
+    val system: String,
+    val circle: String,
+    val squircle: String,
+    val rounded: String,
+    val square: String,
+    val teardrop: String,
+    val none: String,
+) {
+    fun name(id: String) = when (id) {
+        "circle" -> circle; "squircle" -> squircle; "rounded" -> rounded; "square" -> square
+        "teardrop" -> teardrop; "none" -> none; else -> system
+    }
+}
 
 /** Тексты экрана диагностики. */
 data class DiagStrings(

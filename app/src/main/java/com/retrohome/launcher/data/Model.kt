@@ -52,6 +52,8 @@ data class Settings(
     val gestures: Boolean = true,
     /** Набор значков (пакет) или null — обычные значки. */
     val iconPack: String? = null,
+    /** Форма значков: system — как в системе, или circle, squircle, rounded, square, teardrop, none. */
+    val iconShape: String = "system",
     /**
      * Почта для связи в запросах к Википедии: так требуют её правила, и с ней лимит запросов
      * 200 в минуту вместо 10. Видит только Википедия.

@@ -124,6 +124,7 @@ interface SettingsActions {
     fun openUsageAccess() {}
     fun toggleGestures() {}
     fun cycleIconPack(dir: Int = 1) {}
+    fun cycleIconShape(dir: Int = 1) {}
     fun editContact() {}
     fun editRaAccount() {}
     fun openNetworkCheck() {}
@@ -337,6 +338,9 @@ fun SettingsScreen(
             }
             item {
                 ChoiceRow(s.iconPack, iconPackName ?: s.iconPackSystem, desc = s.iconPackDesc) { a.cycleIconPack(it) }
+            }
+            item {
+                ChoiceRow(s.shape.title, s.shape.name(settings.iconShape), desc = s.shape.desc) { a.cycleIconShape(it) }
             }
             item {
                 ChoiceRow(s.autoAdd, if (settings.autoAddNew) s.on else s.off, desc = s.autoAddDesc) { a.toggleAutoAdd() }

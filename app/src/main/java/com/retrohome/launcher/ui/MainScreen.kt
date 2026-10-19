@@ -226,6 +226,7 @@ fun MainScreen(
             override fun openUsageAccess() = controller.openUsageAccess()
             override fun toggleGestures() = controller.toggleGestures()
             override fun cycleIconPack(dir: Int) = controller.cycleIconPack(dir)
+            override fun cycleIconShape(dir: Int) = controller.cycleIconShape(dir)
             override fun editContact() = push(Screen.CONTACT)
             override fun editRaAccount() = push(Screen.RA_ACCOUNT)
             override fun openNetworkCheck() = push(Screen.NETWORK_CHECK)

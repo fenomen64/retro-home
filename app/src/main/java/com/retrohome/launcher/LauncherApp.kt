@@ -516,6 +516,11 @@ class LauncherController(
         d.copy(settings = d.settings.copy(iconPack = options.cycle(d.settings.iconPack, dir)))
     }
 
+    /** Форма значков по кругу: как в системе, круг, капля… */
+    fun cycleIconShape(dir: Int = 1) = store.update { d ->
+        d.copy(settings = d.settings.copy(iconShape = com.retrohome.launcher.data.IconShapes.ids.cycle(d.settings.iconShape, dir)))
+    }
+
     fun iconPackName(pkg: String?): String? = pkg?.let { p -> apps.iconPacks.installed().firstOrNull { it.packageName == p }?.label ?: p }
 
     /** Свайп вниз по рабочему столу: открыть шторку уведомлений (как в обычных лаунчерах). */

@@ -203,9 +203,14 @@ open class MainActivity : ComponentActivity() {
         handler.postDelayed(restoreOrientation, 700)
         controller.onLauncherResumed()
         music.setResumed(true)
+        // Форму значков могли сменить в настройках системы, пока лаунчер был в фоне
+        if (controller.apps.refreshShape()) shapeVersion++
     }
 
     private var lastOrientation = Configuration.ORIENTATION_PORTRAIT
+
+    /** Растёт, когда меняется форма значков в системе — значки перерисовываются. */
+    private var shapeVersion by mutableStateOf(0)
 
     override fun onPause() {
         lastOrientation = resources.configuration.orientation
@@ -241,6 +246,7 @@ open class MainActivity : ComponentActivity() {
             override fun load(key: String, sizePx: Int): ImageBitmap? = c.apps.icon(key, sizePx)?.asImageBitmap()
         }
         c.apps.iconPack = c.store.data.value.settings.iconPack
+        c.apps.iconShape = c.store.data.value.settings.iconShape
 
         val coverCache = object : android.util.LruCache<String, ImageBitmap>(32) {}
         val covers = object : CoverLoader {
@@ -260,7 +266,12 @@ open class MainActivity : ComponentActivity() {
             val mode = data.settings.mode
             LaunchedEffect(mode) { applyOrientation(mode) }
             val st = data.settings
-            val icons = remember(st.iconPack) { c.apps.iconPack = st.iconPack; iconLoader() }
+            // Новый загрузчик — значки перерисуются: сменили набор, форму или форму в системе
+            val icons = remember(st.iconPack, st.iconShape, shapeVersion) {
+                c.apps.iconPack = st.iconPack
+                c.apps.iconShape = st.iconShape
+                iconLoader()
+            }
             val consoleNow = appMode || isConsoleMode(st.mode, LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE)
             LaunchedEffect(st.sfxPack, st.sfxVolume) { sounds.configure(soundPackOf(st.sfxPack), st.sfxVolume) }
             LaunchedEffect(st.haptics) { haptics.level = hapticLevelOf(st.haptics) }
