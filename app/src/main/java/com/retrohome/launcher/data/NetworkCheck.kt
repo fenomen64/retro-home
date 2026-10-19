@@ -5,8 +5,11 @@ package com.retrohome.launcher.data
  * Показывает точную причину сбоя — чтобы не гадать, почему «ничего не грузится».
  */
 object NetworkCheck {
-    /** id — для подписи на нужном языке (covers, wikiEn, wikiRu, wikidata, switch, ra). */
-    data class Target(val id: String, val url: String)
+    /**
+     * id — для подписи на нужном языке (covers, wikiEn, wikiRu, wikidata, switch, ra).
+     * unauthorizedIsOk — ответ «нужен ключ» (401) тоже значит, что сайт доступен.
+     */
+    data class Target(val id: String, val url: String, val unauthorizedIsOk: Boolean = false, val withAccount: Boolean = false)
 
     val targets = listOf(
         Target("covers", "https://thumbnails.libretro.com/"),
@@ -14,15 +17,24 @@ object NetworkCheck {
         Target("wikiRu", "https://ru.wikipedia.org/w/api.php?action=query&meta=siteinfo&format=json"),
         Target("wikidata", "https://www.wikidata.org/w/api.php?action=query&meta=siteinfo&format=json"),
         Target("switch", "https://tinfoil.media/"),
-        Target("ra", "https://retroachievements.org/"),
+        // Не главная страница (она закрыта защитой от роботов), а тот же API, что использует лаунчер.
+        // Без ключа он отвечает «нужен ключ» — значит, сайт доступен
+        Target("ra", "https://retroachievements.org/API/API_GetConsoleIDs.php", unauthorizedIsOk = true),
     )
 
     /** Вид проблемы — по нему подбирается объяснение и совет. */
-    enum class Kind { OK, NO_DNS, TIMEOUT, REFUSED, TLS, LIMIT, REJECTED, SERVER, NO_PERMISSION, OTHER }
+    enum class Kind { OK, NO_DNS, TIMEOUT, REFUSED, TLS, LIMIT, REJECTED, SERVER, NO_PERMISSION, BAD_ACCOUNT, OTHER }
 
     data class Result(val target: Target, val code: Int, val ms: Long, val error: String?) {
         val host: String get() = runCatching { java.net.URL(target.url).host }.getOrDefault(target.url)
-        val kind: Kind get() = classify(code, error)
+        /** Текст ошибки без ключа доступа (на случай, если в нём окажется адрес запроса). */
+        val safeError: String? get() = error?.replace(Regex("""([?&]y=)[^&\s"]+"""), "$1***")
+        val kind: Kind get() = when {
+            code == 401 && target.unauthorizedIsOk -> Kind.OK
+            // Проверяли с аккаунтом: сайт ответил, но логин или ключ не подошли
+            (code == 401 || code == 403) && target.withAccount -> Kind.BAD_ACCOUNT
+            else -> classify(code, error)
+        }
     }
 
     fun classify(code: Int, error: String?): Kind {
@@ -42,9 +54,14 @@ object NetworkCheck {
         }
     }
 
-    /** Проверить все сайты по очереди. onEach — результат каждого, по мере готовности. */
-    fun run(transport: Transport, userAgent: String, onEach: (Result) -> Unit = {}): List<Result> =
-        targets.map { t ->
+    /**
+     * Проверить все сайты по очереди. onEach — результат каждого, по мере готовности.
+     * raAccount — логин и ключ RetroAchievements: если указаны, проверяется и вход.
+     */
+    fun run(transport: Transport, userAgent: String, raAccount: Pair<String, String>? = null, onEach: (Result) -> Unit = {}): List<Result> =
+        targets.map { base ->
+            val t = if (base.id == "ra" && raAccount != null)
+                Target("ra", Ra.profileUrl(raAccount.first, raAccount.second), withAccount = true) else base
             val start = System.nanoTime()
             val r = transport.open(t.url, null, userAgent)
             Result(t, r.code, (System.nanoTime() - start) / 1_000_000, r.error).also(onEach)

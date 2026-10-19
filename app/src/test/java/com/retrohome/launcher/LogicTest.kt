@@ -637,3 +637,36 @@ class NetworkCheckTest {
         }
     }
 }
+
+/** RetroAchievements: проверяется API (главная страница закрыта защитой от роботов), с аккаунтом — и вход. */
+class RaNetworkCheckTest {
+    private val NC = com.retrohome.launcher.data.NetworkCheck
+    private fun ra(code: Int, account: Pair<String, String>?): com.retrohome.launcher.data.NetworkCheck.Result {
+        val urls = mutableListOf<String>()
+        val t = com.retrohome.launcher.data.Transport { url, _, _ -> urls += url; com.retrohome.launcher.data.HttpResponse(if ("retroachievements" in url) code else 200) }
+        val r = NC.run(t, "UA", account).first { it.target.id == "ra" }
+        assertTrue(urls.none { it == "https://retroachievements.org/" })
+        assertTrue(urls.filter { "retroachievements" in it }.all { "/API/" in it })
+        return r
+    }
+
+    @Test fun withoutAccountAnswerNeedKeyMeansReachable() {
+        assertEquals(com.retrohome.launcher.data.NetworkCheck.Kind.OK, ra(401, null).kind)
+        assertEquals(com.retrohome.launcher.data.NetworkCheck.Kind.OK, ra(200, null).kind)
+        assertEquals(com.retrohome.launcher.data.NetworkCheck.Kind.LIMIT, ra(429, null).kind)
+    }
+
+    @Test fun withAccountChecksLogin() {
+        assertEquals(com.retrohome.launcher.data.NetworkCheck.Kind.OK, ra(200, "player" to "KEY").kind)
+        assertEquals(com.retrohome.launcher.data.NetworkCheck.Kind.BAD_ACCOUNT, ra(401, "player" to "KEY").kind)
+    }
+
+    @Test fun keyNeverShown() {
+        val r = com.retrohome.launcher.data.NetworkCheck.Result(
+            com.retrohome.launcher.data.NetworkCheck.Target("ra", "https://retroachievements.org/API/x.php?u=a&y=SECRET123", withAccount = true),
+            0, 10, "FileNotFoundException: https://retroachievements.org/API/x.php?u=a&y=SECRET123",
+        )
+        assertTrue(r.safeError!!, "SECRET123" !in r.safeError!!)
+        assertTrue("SECRET123" !in r.host)
+    }
+}

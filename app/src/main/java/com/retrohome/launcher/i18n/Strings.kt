@@ -556,6 +556,7 @@ val RU = Strings(
         kServer = "Сайт временно не работает. Попробуйте позже.",
         kPermission = "У лаунчера нет доступа к интернету. Проверьте разрешения приложения и брандмауэр (на некоторых прошивках доступ к сети выдаётся отдельно).",
         kOther = "Не удалось соединиться.",
+        kBadAccount = "Сайт работает, но не принимает логин или ключ. Проверьте их в Настройки → RetroAchievements.",
         problemHint = "Не удаётся загрузить данные — подробности в Настройки → «Проверка соединения»",
     ),
     ra = RaStrings(
@@ -847,6 +848,7 @@ val EN = Strings(
         kServer = "The site is temporarily down. Try again later.",
         kPermission = "The launcher has no internet access. Check the app's permissions and any firewall (some firmwares grant network access separately).",
         kOther = "Couldn't connect.",
+        kBadAccount = "The site works, but rejects the username or key. Check them in Settings → RetroAchievements.",
         problemHint = "Can't load data — see Settings → Connection check",
     ),
     ra = RaStrings(
@@ -940,6 +942,7 @@ data class NetStrings(
     val kServer: String,
     val kPermission: String,
     val kOther: String,
+    val kBadAccount: String,
     val problemHint: String,
 ) {
     fun label(id: String) = when (id) {
@@ -956,6 +959,7 @@ data class NetStrings(
         com.retrohome.launcher.data.NetworkCheck.Kind.REJECTED -> kRejected
         com.retrohome.launcher.data.NetworkCheck.Kind.SERVER -> kServer
         com.retrohome.launcher.data.NetworkCheck.Kind.NO_PERMISSION -> kPermission
+        com.retrohome.launcher.data.NetworkCheck.Kind.BAD_ACCOUNT -> kBadAccount
         com.retrohome.launcher.data.NetworkCheck.Kind.OTHER -> kOther
     }
 }

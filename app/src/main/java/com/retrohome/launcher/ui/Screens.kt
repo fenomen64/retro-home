@@ -920,7 +920,7 @@ fun NetworkCheckScreen(
                     r == null -> if (running) s.net.checking else s.net.waiting
                     ok -> s.net.ok.format(r.ms)
                     // Совет и техническая причина — по ней можно понять, что именно не так
-                    else -> s.net.explain(kind!!) + "\n" + r.host + ": " + (r.error ?: "HTTP ${r.code}")
+                    else -> s.net.explain(kind!!) + "\n" + r.host + ": " + (r.safeError ?: "HTTP ${r.code}")
                 }
                 FocusRow(onClick = {}) {
                     TitleAndDesc(s.net.label(t.id), desc, if (r == null) "…" else if (ok) "✓" else "✗")

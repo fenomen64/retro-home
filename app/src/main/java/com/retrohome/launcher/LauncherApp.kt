@@ -88,7 +88,9 @@ class LauncherController(
     suspend fun checkNetwork(onEach: (com.retrohome.launcher.data.NetworkCheck.Result) -> Unit) =
         kotlinx.coroutines.withContext(Dispatchers.IO) {
             // Результат каждого сайта показывается сразу, не дожидаясь остальных
-            com.retrohome.launcher.data.NetworkCheck.run(com.retrohome.launcher.data.UrlTransport, metas.userAgent(), onEach)
+            val st = data.settings
+            val ra = if (st.raUser.isNullOrBlank() || st.raKey.isNullOrBlank()) null else st.raUser to st.raKey
+            com.retrohome.launcher.data.NetworkCheck.run(com.retrohome.launcher.data.UrlTransport, metas.userAgent(), ra, onEach)
         }
 
     /** Названия игры для поиска на RetroAchievements. */
