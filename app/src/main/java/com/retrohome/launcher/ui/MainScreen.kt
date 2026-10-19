@@ -36,7 +36,7 @@ import com.retrohome.launcher.ui.console.AudioState
 import com.retrohome.launcher.audio.LocalSfx
 import com.retrohome.launcher.audio.Sfx
 
-enum class Screen { SETTINGS, CONSOLE_APPS, HIDDEN_APPS, SEARCH, FOLDERS, SYSTEM_PICKER, EMULATORS, TITLE_EDIT, CONSOLE_TABS, WIDGETS, CONTACT, RA_ACCOUNT, NETWORK_CHECK }
+enum class Screen { SETTINGS, CONSOLE_APPS, HIDDEN_APPS, SEARCH, FOLDERS, SYSTEM_PICKER, EMULATORS, TITLE_EDIT, CONSOLE_TABS, WIDGETS, CONTACT, RA_ACCOUNT, NETWORK_CHECK, DIAGNOSTICS }
 
 /**
  * Лаунчер открыт как обычное приложение (значком из чужого лаунчера), а не как главный экран:
@@ -229,6 +229,7 @@ fun MainScreen(
             override fun editContact() = push(Screen.CONTACT)
             override fun editRaAccount() = push(Screen.RA_ACCOUNT)
             override fun openNetworkCheck() = push(Screen.NETWORK_CHECK)
+            override fun openDiagnostics() = push(Screen.DIAGNOSTICS)
         }
     }
 
@@ -278,6 +279,13 @@ fun MainScreen(
                 iconPackName = remember(data.settings.iconPack) { controller.iconPackName(data.settings.iconPack) },
             )
             Screen.NETWORK_CHECK -> NetworkCheckScreen(::pop) { onEach -> controller.checkNetwork(onEach) }
+            Screen.DIAGNOSTICS -> DiagnosticsScreen(
+                ::pop,
+                report = controller::diagnostics,
+                onShare = { controller.shareText(it, s.diag.title) },
+                onCopy = controller::copyText,
+                onRetry = controller::refreshMeta,
+            )
             Screen.RA_ACCOUNT -> RaAccountScreen(
                 data.settings.raUser, data.settings.raKey, ::pop,
                 onSave = { u, k -> controller.setRaAccount(u, k) },

@@ -127,6 +127,7 @@ interface SettingsActions {
     fun editContact() {}
     fun editRaAccount() {}
     fun openNetworkCheck() {}
+    fun openDiagnostics() {}
 }
 
 /** Заголовок раздела настроек. */
@@ -309,6 +310,9 @@ fun SettingsScreen(
             }
             item {
                 FocusRow(onClick = a::openNetworkCheck) { TitleAndDesc(s.net.title, s.net.desc) }
+            }
+            item {
+                FocusRow(onClick = a::openDiagnostics) { TitleAndDesc(s.diag.title, s.diag.desc) }
             }
             item {
                 FocusRow(onClick = a::editRaAccount) {
@@ -933,6 +937,52 @@ fun NetworkCheckScreen(
                 Text(s.net.allOk, color = Palette.accent, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
             }
             FocusRow(onClick = { if (!running) round++ }) { TitleAndDesc(if (running) s.net.checking else s.net.again) }
+        }
+    }
+}
+
+/** Пометка в отчёте, что загрузка ещё идёт (тогда экран сам обновляет отчёт). */
+const val DIAG_RUNNING = "Загрузка сейчас: идёт"
+
+/**
+ * Диагностика обложек и описаний: отчёт текстом, который можно отправить разработчику.
+ * Отчёт разбит на абзацы-строки, чтобы его можно было листать и крестовиной.
+ */
+@Composable
+fun DiagnosticsScreen(
+    onBack: () -> Unit,
+    report: () -> String,
+    onShare: (String) -> Unit,
+    onCopy: (String) -> Unit,
+    onRetry: () -> Unit,
+) {
+    val s = LocalStrings.current
+    var round by remember { mutableStateOf(0) }
+    var copied by remember { mutableStateOf(false) }
+    val text = remember(round) { report() }
+    // Пока идёт поиск, отчёт обновляется сам
+    LaunchedEffect(round) {
+        kotlinx.coroutines.delay(3000)
+        if (DIAG_RUNNING in text) round++
+    }
+    // Абзацы, а длинные (журнал) — кусками по 12 строк: каждый кусок — строка списка, крестовина листает по ним
+    val blocks = remember(text) {
+        text.trimEnd().split("\n\n").flatMap { b -> b.lines().chunked(12).map { it.joinToString("\n") } }
+    }
+    ScreenFrame(s.diag.title, onBack) {
+        LazyColumn(Modifier.fillMaxSize()) {
+            item { Text(s.diag.intro, color = Palette.dim, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
+            item { FocusRow(onClick = { onShare(text) }) { TitleAndDesc(s.diag.share, s.diag.shareDesc) } }
+            item { FocusRow(onClick = { onCopy(text); copied = true }) { TitleAndDesc(s.diag.copy, if (copied) s.diag.copied else null) } }
+            item { FocusRow(onClick = { onRetry(); round++ }) { TitleAndDesc(s.diag.retry, s.diag.retryDesc) } }
+            items(blocks.size) { i ->
+                FocusRow(onClick = {}) {
+                    Text(
+                        blocks[i], color = Palette.text, fontSize = 12.sp, lineHeight = 16.sp,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                    )
+                }
+            }
         }
     }
 }

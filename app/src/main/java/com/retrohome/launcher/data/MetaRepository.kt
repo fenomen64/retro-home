@@ -143,13 +143,15 @@ class MetaRepository(
      * ограничивает частоту), потом по одной — описания из Википедии.
      */
     fun fetch(games: List<Game>, titleFor: (Game) -> String? = { null }, retryMissing: Boolean = false) {
-        if (job?.isActive == true && !retryMissing) return
+        if (job?.isActive == true && !retryMissing) { DiagLog.add("Загрузка уже идёт — новый запуск пропущен"); return }
         job?.cancel()
         job = scope.launch(Dispatchers.IO) {
-            if (!online()) return@launch
+            if (!online()) { DiagLog.add("Загрузка не начата: Android сообщает, что интернета нет"); return@launch }
             val visual = games.filter { needsVisual(_meta.value[it.id], retryMissing) }
             val text = games.filter { needsText(_meta.value[it.id], retryMissing) }
             val total = visual.size + text.size
+            val waitingCount = games.count { waiting(_meta.value[it.id], retryMissing) }
+            DiagLog.add("Загрузка${if (retryMissing) " (повтор ненайденного)" else ""}: игр ${games.size}, нужны обложки ${visual.size}, описания ${text.size}, ждут повтора после сбоя $waitingCount")
             if (total == 0) return@launch
             val done = AtomicInteger()
             _progress.value = 0 to total
@@ -172,6 +174,12 @@ class MetaRepository(
                     _progress.value = done.incrementAndGet() to total
                     if (i % 5 == 4) save()
                 }
+                DiagLog.add("Загрузка завершена")
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                DiagLog.add("Загрузка прервана")
+                throw e
+            } catch (e: Throwable) {
+                DiagLog.error("Загрузка остановилась", e)
             } finally {
                 save()
                 _progress.value = null
@@ -202,9 +210,15 @@ class MetaRepository(
         val sw = if (g.system == GameSystem.SWITCH) SwitchLookup(g, title) else null
         if (force || !old.coverTried || old.cover == null) {
             val before = errorsHere()
-            val found = runCatching { if (sw != null) fetchSwitchCover(sw) else fetchCover(g, title) }.getOrNull()
+            lastProblem.set(null)
+            val found = runCatching { if (sw != null) fetchSwitchCover(sw) else fetchCover(g, title) }
+                .onFailure { DiagLog.error(tag(g) + ": обложка", it) }.getOrNull()
             // Не нашлось из-за сбоя сети — это не «нет обложки», поищем ещё раз позже
             val error = found == null && errorsHere() > before
+            when {
+                found != null -> DiagLog.add(tag(g) + ": обложка ✓ «${found.third}»")
+                error -> DiagLog.add(tag(g) + ": обложка — сбой сети (${lastProblem.get() ?: "?"})")
+            }
             failed = failed || error
             m = m.copy(
                 cover = found?.first ?: old.cover,
@@ -215,13 +229,25 @@ class MetaRepository(
         }
         if (force || !old.snapTried || (old.snap == null && m.thumbName != old.thumbName)) {
             val before = errorsHere()
-            val snap = runCatching { if (sw != null) fetchSwitchSnap(sw) else fetchSnap(g, m.thumbName ?: findThumbName(g, title)) }.getOrNull()
+            val snap = runCatching { if (sw != null) fetchSwitchSnap(sw) else fetchSnap(g, m.thumbName ?: findThumbName(g, title)) }
+                .onFailure { DiagLog.error(tag(g) + ": снимок экрана", it) }.getOrNull()
             val error = snap == null && errorsHere() > before
             failed = failed || error
             m = m.copy(snap = snap ?: old.snap, snapTried = old.snapTried && !force || !error)
         }
         finish(g, m, failed)
     }
+
+    private fun tag(g: Game) = "[${g.system.name}] ${g.title}"
+
+    /** Сохранённые списки обложек: консоль, число имён, когда загружен (для отчёта «Диагностика»). */
+    fun indexInfo(): List<Triple<String, Int, Long>> =
+        indexDir.listFiles().orEmpty().filter { it.name.endsWith(".txt") }.sortedBy { it.name }.map { f ->
+            Triple(f.name.removeSuffix(".txt"), runCatching { f.readLines().count { it.isNotBlank() } }.getOrDefault(-1), f.lastModified())
+        }
+
+    /** Идёт ли сейчас загрузка. */
+    val running: Boolean get() = job?.isActive == true
 
     /** Журнал поиска описания текущей игры (показывается в меню игры). */
     private val trace = ArrayList<String>()
@@ -257,8 +283,14 @@ class MetaRepository(
             val queries = listOfNotNull(title, m.name ?: sw?.name, g.title).distinct()
             val before = errorsHere()
             lastProblem.set(null)
-            val d = runCatching { fetchDescription(g, queries, sw) }.getOrNull()
+            val d = runCatching { fetchDescription(g, queries, sw) }
+                .onFailure { DiagLog.error(tag(g) + ": описание", it) }.getOrNull()
             val error = d == null && errorsHere() > before
+            DiagLog.add(tag(g) + ": описание " + when {
+                d != null -> "✓ " + listOfNotNull(d.en?.let { "en" }, d.ru?.let { "ru" }).joinToString("+") + (d.wikiEn ?: d.wikiRu)?.let { " («$it»)" }.orEmpty()
+                error -> "— сбой сети (${lastProblem.get() ?: "?"})"
+                else -> "— не найдено (искали: ${queries.joinToString(" | ")})"
+            })
             if (error) log("Сбой сети (${lastProblem.get() ?: "?"}) — повтор позже. Причину покажет Настройки → «Проверка соединения»")
             failed = failed || error
             m = if (d != null) m.copy(
@@ -280,7 +312,7 @@ class MetaRepository(
         if (qidChanged) m = m.copy(year = null, genresEn = emptyList(), genresRu = emptyList(), developers = emptyList(), publishers = emptyList())
         if (force || !old.factsTried || qidChanged || recheck) {
             val before = errorsHere()
-            val f = runCatching { fetchFacts(m, g.system) }.getOrNull()
+            val f = runCatching { fetchFacts(m, g.system) }.onFailure { DiagLog.error(tag(g) + ": факты", it) }.getOrNull()
             val error = f == null && errorsHere() > before
             failed = failed || error
             m = m.copy(
@@ -395,11 +427,13 @@ class MetaRepository(
         val file = File(indexDir, system.name + ".txt")
         // Пустой список (ответ испорчен фильтром, VPN или страницей-заглушкой) не запоминаем
         val fresh = file.exists() && file.length() > 0 && System.currentTimeMillis() - file.lastModified() < 7L * 24 * 3600 * 1000
-        val names = if (fresh) file.readLines().filter { it.isNotBlank() } else {
-            val url = Thumbnails.indexUrl(system) ?: return null
-            val html = get(url) ?: return null
+        val names = if (fresh) file.readLines().filter { it.isNotBlank() }.also { DiagLog.add("Список обложек ${system.name}: из кэша, ${it.size} имён") } else {
+            val url = Thumbnails.indexUrl(system) ?: return null.also { DiagLog.add("Список обложек ${system.name}: для этой консоли в базе libretro обложек нет") }
+            val html = get(url) ?: return null.also { DiagLog.add("Список обложек ${system.name}: не загрузился (${lastProblem.get() ?: "?"})") }
             val parsed = Thumbnails.parseIndex(html)
+            DiagLog.add("Список обложек ${system.name}: загружен, ${html.length / 1024} КБ, ${parsed.size} имён")
             if (parsed.isEmpty()) {
+                DiagLog.add("Список обложек ${system.name}: начало ответа: " + html.take(160).replace(Regex("\\s+"), " "))
                 // Сайт ответил, но вместо списка обложек — что-то другое: это сбой, а не «обложки нет»
                 netErrors.set(errorsHere() + 1)
                 val problem = "${runCatching { URL(url).host }.getOrDefault("?")}: вместо списка обложек пришла другая страница"
@@ -415,15 +449,17 @@ class MetaRepository(
     /** Файл обложки и официальное название из базы. */
     private fun fetchCover(g: Game, title: String?): Triple<String, String, String>? {
         val idx = index(g.system) ?: return null
-        val name = Thumbnails.match(g.fileName, idx, title) ?: return null
-        val bytes = getBytes(Thumbnails.imageUrl(g.system, name) ?: return null) ?: return null
+        val name = Thumbnails.match(g.fileName, idx, title)
+            ?: return null.also { DiagLog.add(tag(g) + ": обложка — нет похожего имени в списке (файл «${g.fileName}»${title?.let { t -> ", название «$t»" }.orEmpty()})") }
+        val bytes = getBytes(Thumbnails.imageUrl(g.system, name) ?: return null)
+            ?: return null.also { DiagLog.add(tag(g) + ": обложка «$name» — картинка не загрузилась (${lastProblem.get() ?: "нет на сервере"})") }
         // Уменьшаем до разумного размера, чтобы не занимать память
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
         var sample = 1
         while (bounds.outHeight / (sample * 2) >= 560) sample *= 2
         val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
-            ?: return null
+            ?: return null.also { DiagLog.add(tag(g) + ": обложка «$name» — не удалось прочитать картинку (${bytes.size} байт, начало: ${String(bytes.copyOf(minOf(24, bytes.size))).replace(Regex("[^\\x20-\\x7E]"), ".")})") }
         val out = saveCover(g, bmp)
         bmp.recycle()
         return Triple(out, Thumbnails.displayName(name), name)
@@ -756,7 +792,7 @@ class MetaRepository(
     }
 
     companion object {
-        const val VERSION = "0.28"
+        const val VERSION = "0.29"
         /** Страница проекта — контакт в подписи запросов (Issues для связи). */
         const val PROJECT_URL = "https://github.com/fenomen64/retro-home"
         const val USER_AGENT = "RetroHome/$VERSION (personal Android game launcher)"

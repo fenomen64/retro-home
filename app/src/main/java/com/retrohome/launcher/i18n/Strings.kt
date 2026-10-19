@@ -250,6 +250,8 @@ data class Strings(
     val net: NetStrings,
     /** Эмуляторы с особым запуском (Lemuroid). */
     val emu: EmuStrings,
+    /** Диагностика загрузки обложек и описаний. */
+    val diag: DiagStrings,
 ) {
     val langName: String get() = if (lang == Lang.RU) "Русский" else "English"
 
@@ -534,6 +536,18 @@ val RU = Strings(
     pickMusic = "Выбрать свою мелодию",
     pickMusicDesc = "Любой аудиофайл с устройства, будет играть по кругу",
     musicVolume = "Громкость музыки",
+    diag = DiagStrings(
+        title = "Диагностика обложек и описаний",
+        desc = "Отчёт, почему у игр нет обложек или описаний",
+        intro = "Отчёт о поиске обложек и описаний: какие папки найдены, сколько игр, что нашлось и почему нет. Почта и ключи в него не попадают. Нажмите «Повторить поиск», подождите минуту, затем «Поделиться» — и отправьте отчёт разработчику.",
+        share = "Поделиться отчётом",
+        shareDesc = "Отправить в Telegram, почту и т. д.",
+        copy = "Скопировать отчёт",
+        copied = "Отчёт скопирован",
+        retry = "Повторить поиск",
+        retryDesc = "Заново искать обложки и описания, которые не нашлись",
+        refresh = "Обновить отчёт",
+    ),
     emu = EmuStrings(
         lemuroidHint = "Lemuroid не умеет открывать игру по файлу, поэтому открыт его список игр. Чтобы запускать сразу: в Lemuroid удерживайте игру → «Создать ярлык» — Retro Home запомнит её",
         lemuroidHintNotHome = "Lemuroid не умеет открывать игру по файлу, поэтому открыт его список игр. Прямой запуск работает через ярлыки, а их принимает только главный экран: сделайте Retro Home главным экраном и создайте ярлык игры в Lemuroid",
@@ -833,6 +847,18 @@ val EN = Strings(
     pickMusic = "Choose your own track",
     pickMusicDesc = "Any audio file from the device, played on a loop",
     musicVolume = "Music volume",
+    diag = DiagStrings(
+        title = "Covers and descriptions diagnostics",
+        desc = "A report on why games have no covers or descriptions",
+        intro = "A report on the cover and description lookup: which folders were found, how many games, what was found and why not. Your email and keys are not included. Press \"Retry lookup\", wait a minute, then \"Share\" and send the report to the developer.",
+        share = "Share report",
+        shareDesc = "Send via Telegram, email, etc.",
+        copy = "Copy report",
+        copied = "Report copied",
+        retry = "Retry lookup",
+        retryDesc = "Look again for covers and descriptions that weren't found",
+        refresh = "Refresh report",
+    ),
     emu = EmuStrings(
         lemuroidHint = "Lemuroid can't open a game from a file, so its game list was opened. To launch directly: in Lemuroid long-press the game → \"Create shortcut\" and Retro Home will remember it",
         lemuroidHintNotHome = "Lemuroid can't open a game from a file, so its game list was opened. Direct launch works through shortcuts, and only the home screen receives them: make Retro Home your home screen and create the game's shortcut in Lemuroid",
@@ -931,6 +957,20 @@ data class RaStrings(
     val raFail: String,
     val raNet: String,
     val raRemove: String,
+)
+
+/** Тексты экрана диагностики. */
+data class DiagStrings(
+    val title: String,
+    val desc: String,
+    val intro: String,
+    val share: String,
+    val shareDesc: String,
+    val copy: String,
+    val copied: String,
+    val retry: String,
+    val retryDesc: String,
+    val refresh: String,
 )
 
 /** Тексты про эмуляторы с особым запуском. */

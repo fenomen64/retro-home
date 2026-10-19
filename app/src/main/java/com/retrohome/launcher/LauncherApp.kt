@@ -127,6 +127,11 @@ class LauncherController(
         // После каждого сканирования догружаем обложки и описания новых игр
         scope.launch {
             games.result.collect { r ->
+                if (r.time > 0) com.retrohome.launcher.data.DiagLog.add(
+                    "Сканирование: папок ${r.folders.size}, игр ${r.games.size}" +
+                        r.folders.joinToString("; ", " — ") { f -> "${f.name}→${f.system?.name ?: "не используется"} (${f.gameCount})" }
+                )
+                if (r.games.isNotEmpty() && !data.settings.autoMeta) com.retrohome.launcher.data.DiagLog.add("Автозагрузка обложек и описаний выключена в настройках")
                 if (r.games.isNotEmpty() && data.settings.autoMeta) metas.fetch(r.games, ::titleOverride)
             }
         }
@@ -544,6 +549,90 @@ class LauncherController(
     fun deletePage(page: Int) = store.update { d ->
         val (items, pages) = HomeLayout.deletePage(d.home, d.pageCount, page)
         d.copy(home = items, pageCount = pages)
+    }
+
+    // --- Диагностика ---
+
+    /**
+     * Отчёт о том, почему у игр нет обложек или описаний: устройство, настройки (без почты и ключей),
+     * найденные папки, итоги по консолям, примеры ненайденного и журнал последней загрузки.
+     */
+    fun diagnostics(): String {
+        val d = data
+        val st = d.settings
+        val scan = games.result.value
+        val meta = metas.meta.value
+        val now = System.currentTimeMillis()
+        val df = java.text.SimpleDateFormat("dd.MM HH:mm", java.util.Locale.US)
+        val sb = StringBuilder()
+        val version = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull()
+        sb.appendLine("Retro Home $version · Android ${android.os.Build.VERSION.RELEASE} (SDK ${android.os.Build.VERSION.SDK_INT}) · ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
+        val cm = context.getSystemService(android.net.ConnectivityManager::class.java)
+        val caps = runCatching { cm?.getNetworkCapabilities(cm.activeNetwork) }.getOrNull()
+        val net = when {
+            caps == null -> "нет"
+            caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN) -> "есть (VPN)"
+            else -> "есть"
+        }
+        sb.appendLine("Интернет: $net · Язык: ${st.lang} · Автозагрузка: ${if (st.autoMeta) "вкл" else "ВЫКЛ"} · Почта для Википедии: ${if (st.contactEmail.isNullOrBlank()) "нет" else "указана"}")
+        sb.appendLine("Папка ROMs: ${if (st.romsTree == null) "НЕ ВЫБРАНА" else if (hasRomsAccess()) "выбрана, доступ есть" else "выбрана, НЕТ ДОСТУПА"} · сканирование: ${if (scan.time > 0) df.format(java.util.Date(scan.time)) else "не было"}")
+        sb.appendLine("Загрузка сейчас: ${metas.progress.value?.let { "идёт ${it.first}/${it.second}" } ?: if (metas.running) "идёт" else "не идёт"}${metas.problem.value?.let { " · последняя проблема: $it" }.orEmpty()}")
+        sb.appendLine()
+        sb.appendLine("Папки (${scan.folders.size}):")
+        scan.folders.forEach { f ->
+            sb.appendLine("  ${f.name} → ${f.system?.name ?: if (f.detected == null) "не распознана" else "не используется"}: игр ${f.gameCount}")
+        }
+        sb.appendLine()
+        sb.appendLine("Игры по консолям (всего ${scan.games.size}):")
+        scan.games.groupBy { it.system }.toSortedMap(compareBy { it.name }).forEach { (sys, list) ->
+            val ms = list.map { meta[it.id] }
+            sb.appendLine(
+                "  ${sys.name}: ${list.size} · обложки ${ms.count { it?.cover != null }} · описания ${ms.count { it?.descEn != null || it?.descRu != null }}" +
+                    " · не искали ${ms.count { it == null }} · ждут повтора ${ms.count { it != null && it.retryAt > now }}"
+            )
+        }
+        val idx = metas.indexInfo()
+        if (idx.isNotEmpty()) {
+            sb.appendLine()
+            sb.appendLine("Списки обложек: " + idx.joinToString(", ") { (sys, n, t) -> "$sys $n (${df.format(java.util.Date(t))})" })
+        }
+        val missing = scan.games.filter { meta[it.id]?.cover == null }.take(10)
+        if (missing.isNotEmpty()) {
+            sb.appendLine()
+            sb.appendLine("Примеры игр без обложки:")
+            missing.forEach { g ->
+                val m = meta[g.id]
+                val state = when {
+                    m == null -> "ещё не искали"
+                    m.retryAt > now -> "сбой, повтор через ${(m.retryAt - now) / 60_000 + 1} мин"
+                    m.coverTried -> "искали, не нашли"
+                    else -> "не искали"
+                }
+                val desc = when {
+                    m?.descEn != null || m?.descRu != null -> "описание есть"
+                    m?.descTried == true -> "описание не найдено"
+                    else -> "описание не искали"
+                }
+                sb.appendLine("  [${g.system.name}] «${g.fileName}» → «${titleOverride(g) ?: g.title}»: $state, $desc")
+            }
+        }
+        val log = com.retrohome.launcher.data.DiagLog.snapshot()
+        sb.appendLine()
+        sb.appendLine("Журнал (${log.size}):")
+        if (log.isEmpty()) sb.appendLine("  пусто — с запуска лаунчера загрузка не начиналась")
+        log.takeLast(150).forEach { sb.appendLine("  $it") }
+        return sb.toString()
+    }
+
+    /** Отправить текст через «Поделиться» (Telegram, почта и т. д.). */
+    fun shareText(text: String, title: String) {
+        val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text).putExtra(Intent.EXTRA_SUBJECT, title)
+        runCatching { context.startActivity(Intent.createChooser(send, title).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+    }
+
+    fun copyText(text: String) {
+        val cb = context.getSystemService(android.content.ClipboardManager::class.java) ?: return
+        cb.setPrimaryClip(android.content.ClipData.newPlainText("Retro Home", text))
     }
 
     // --- Системные экраны ---
