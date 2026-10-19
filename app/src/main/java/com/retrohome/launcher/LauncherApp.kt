@@ -84,6 +84,13 @@ class LauncherController(
         }
     }
 
+    /** Проверка соединения с сайтами обложек, описаний и достижений (результаты — по мере готовности). */
+    suspend fun checkNetwork(onEach: (com.retrohome.launcher.data.NetworkCheck.Result) -> Unit) =
+        kotlinx.coroutines.withContext(Dispatchers.IO) {
+            // Результат каждого сайта показывается сразу, не дожидаясь остальных
+            com.retrohome.launcher.data.NetworkCheck.run(com.retrohome.launcher.data.UrlTransport, metas.userAgent(), onEach)
+        }
+
     /** Названия игры для поиска на RetroAchievements. */
     private fun raTitles(g: com.retrohome.launcher.data.Game): List<String> =
         listOfNotNull(titleOverride(g), metas.meta.value[g.id]?.name, g.title).distinct()

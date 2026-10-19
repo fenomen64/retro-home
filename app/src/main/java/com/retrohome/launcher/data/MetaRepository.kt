@@ -35,7 +35,13 @@ import java.net.URL
  * После загрузки всё работает без интернета.
  */
 /** Ответ сервера: код, тело (для 200) и заголовок Retry-After. */
-class HttpResponse(val code: Int, val body: ByteArray? = null, val retryAfter: String? = null)
+class HttpResponse(
+    val code: Int,
+    val body: ByteArray? = null,
+    val retryAfter: String? = null,
+    /** Почему не удалось соединиться (для кода 0): «SocketTimeoutException: …». */
+    val error: String? = null,
+)
 
 /** Сетевой транспорт; в тестах подменяется заготовленными ответами. */
 fun interface Transport {
@@ -45,21 +51,24 @@ fun interface Transport {
 
 object UrlTransport : Transport {
     override fun open(url: String, accept: String?, userAgent: String): HttpResponse {
-        val c = try { URL(url).openConnection() as HttpURLConnection } catch (e: Exception) { return HttpResponse(0) }
+        val c = try { URL(url).openConnection() as HttpURLConnection } catch (e: Exception) { return HttpResponse(0, error = describe(e)) }
         return try {
-            c.connectTimeout = 10_000
-            c.readTimeout = 30_000
+            c.connectTimeout = 15_000
+            c.readTimeout = 45_000
             c.setRequestProperty("User-Agent", userAgent)
             if (accept != null) c.setRequestProperty("Accept", accept)
             val code = c.responseCode
             if (code == 200) HttpResponse(200, c.inputStream.use { it.readBytes() })
             else HttpResponse(code, retryAfter = c.getHeaderField("Retry-After"))
-        } catch (e: java.io.IOException) {
-            HttpResponse(0)
+        } catch (e: Exception) {
+            // Не только IOException: без разрешения на сеть бывает SecurityException
+            HttpResponse(0, error = describe(e))
         } finally {
             c.disconnect()
         }
     }
+
+    fun describe(e: Throwable): String = e.javaClass.simpleName + (e.message?.let { ": " + it.take(160) } ?: "")
 }
 
 class MetaRepository(
@@ -247,9 +256,10 @@ class MetaRepository(
             // запасной вариант — название из имени файла
             val queries = listOfNotNull(title, m.name ?: sw?.name, g.title).distinct()
             val before = errorsHere()
+            lastProblem.set(null)
             val d = runCatching { fetchDescription(g, queries, sw) }.getOrNull()
             val error = d == null && errorsHere() > before
-            if (error) log("Сбой сети или лимит Википедии — повтор позже")
+            if (error) log("Сбой сети (${lastProblem.get() ?: "?"}) — повтор позже. Причину покажет Настройки → «Проверка соединения»")
             failed = failed || error
             m = if (d != null) m.copy(
                 // Новое (проверенное) описание целиком заменяет старое
@@ -308,14 +318,27 @@ class MetaRepository(
     private val netErrors = ThreadLocal.withInitial { 0 }
     private fun errorsHere(): Int = netErrors.get() ?: 0
 
+    /** Последняя сетевая проблема в этом потоке: «en.wikipedia.org: HTTP 429» — для журнала поиска. */
+    private val lastProblem = ThreadLocal<String?>()
+
+    /** Последняя сетевая проблема вообще (для подсказки в интерфейсе). */
+    private val _problem = MutableStateFlow<String?>(null)
+    val problem: StateFlow<String?> = _problem
+
     /** Подпись запросов: с почтой для связи Википедия считает лаунчер «опознанным» и даёт 200 запросов в минуту вместо 10. */
+    /**
+     * Правила Википедии требуют, чтобы программа указывала, как с ней связаться (почту или адрес
+     * страницы с контактами), — иначе запросы режутся. По умолчанию это страница проекта на GitHub
+     * (там есть Issues); почта, если пользователь её указал, добавляется к ней.
+     */
     fun userAgent(): String {
         val c = contact()?.trim()?.takeIf { it.contains('@') || it.startsWith("http") }
-        return if (c != null) "RetroHome/$VERSION ($c; personal Android game launcher)" else "RetroHome/$VERSION (personal Android game launcher)"
+        val who = if (c != null) "$PROJECT_URL; $c" else PROJECT_URL
+        return "RetroHome/$VERSION ($who; personal Android game launcher)"
     }
 
     /** Пауза между запросами к Википедии: под её лимит (10 в минуту без почты, 200 с почтой). */
-    private fun wikimediaGap(): Long = if (userAgent().contains('@') || userAgent().contains("http")) 350 else 6_500
+    private fun wikimediaGap(): Long = 350
     private val throttleLock = Object()
     private var lastWikimedia = 0L
 
@@ -335,20 +358,28 @@ class MetaRepository(
     }
 
     private fun request(url: String, accept: String?): ByteArray? {
+        var last: HttpResponse? = null
         for (attempt in 0..3) {
             throttle(url)
             val r = transport.open(url, accept, userAgent())
+            last = r
             val wait: Long = when (r.code) {
-                200 -> return r.body
+                200 -> { _problem.value = null; return r.body }
                 // нет связи или сервер перегружен — подождать и повторить
                 0, 500, 502, 503, 504 -> (2L shl attempt).coerceAtMost(5)
                 // «слишком много запросов» — ждём, сколько попросил сервер
                 429 -> (r.retryAfter?.trim()?.toLongOrNull() ?: (2L shl attempt)).coerceIn(1, 30)
+                // сайт отклонил запрос (например, фильтр по подписи или по адресу) — это не «нет такой страницы»
+                403 -> break
                 else -> return null // 404 и т.п. — такой страницы просто нет
             }
             if (attempt < 3) sleep(wait * 1000)
         }
         netErrors.set(errorsHere() + 1)
+        val host = runCatching { URL(url).host }.getOrDefault("?")
+        val why = last?.let { if (it.code == 0) it.error ?: "нет соединения" else "HTTP ${it.code}" } ?: "?"
+        // В журнал — первый сбой: обычно он и есть причина, остальные — следствия
+        "$host: $why".also { if (lastProblem.get() == null) lastProblem.set(it); _problem.value = it }
         return null
     }
 
@@ -608,8 +639,9 @@ class MetaRepository(
         // Сначала с уточнением «игра + платформа», потом просто по названию
         val tried = HashSet<String>()
         for (q in listOf(Wiki.searchQuery(lang, title, g.system), title)) {
+            val errBefore = errorsHere()
             val results = get(Wiki.searchUrl(lang, q))?.let(Wiki::parseHits).orEmpty()
-            log("$lang: «$q» — найдено ${results.size}")
+            log(if (errorsHere() > errBefore) "$lang: «$q» — сбой сети" else "$lang: «$q» — найдено ${results.size}")
             val ranked = Wiki.rankHits(results, title).filter { tried.add(it) }.take(5)
             val found = pages(lang, ranked, linkTo)
             val good = ranked.mapNotNull { found[it] }
@@ -635,8 +667,9 @@ class MetaRepository(
     private fun findWikidata(g: Game, titles: List<String>): Wikidata.Entity? {
         for (t in titles) {
             val lang = if (t.any { it in '\u0400'..'\u04FF' }) "ru" else "en"
+            val errBefore = errorsHere()
             val ids = get(Wikidata.searchUrl(t, lang))?.let(Wikidata::parseSearch)?.let { Wikidata.pickAll(it, t, lang) }.orEmpty().take(4)
-            log("Викиданные: «$t» — подходящих ${ids.size}")
+            log(if (errorsHere() > errBefore) "Викиданные: «$t» — сбой сети" else "Викиданные: «$t» — подходящих ${ids.size}")
             if (ids.isEmpty()) continue
             val entities = get(Wikidata.entitiesUrl(ids))?.let(Wikidata::parseEntities).orEmpty()
             entityStash.putAll(entities)
@@ -668,6 +701,7 @@ class MetaRepository(
     }
 
     private fun fetchDescription(g: Game, titles: List<String>, sw: SwitchLookup?): Descriptions? {
+        val errStart = errorsHere()
         // 1) Википедия: английская статья, русская по межъязыковой ссылке или поиском
         var en: Wiki.Page? = null
         var ru: Wiki.Page? = null
@@ -702,13 +736,18 @@ class MetaRepository(
             Wikidata.describe(entity, labels, "ru", fallback)?.let { ruText = it; srcRu = DescSource.WIKIDATA }
         }
 
-        if (enText == null && ruText == null) { log("Итог: описание не найдено"); return null }
+        if (enText == null && ruText == null) {
+            log(if (errorsHere() > errStart) "Итог: не удалось загрузить из-за сбоя сети" else "Итог: описание не найдено")
+            return null
+        }
         log("Итог: EN — ${srcEn ?: "нет"}${en?.title?.let { " «$it»" } ?: ""}, RU — ${srcRu ?: "нет"}${ru?.title?.let { " «$it»" } ?: ""}")
         return Descriptions(enText, ruText, en?.title, ru?.title, srcEn, srcRu, en?.qid ?: ru?.qid ?: entity?.id, entity)
     }
 
     companion object {
-        const val VERSION = "0.23"
+        const val VERSION = "0.24"
+        /** Страница проекта — контакт в подписи запросов (Issues для связи). */
+        const val PROJECT_URL = "https://github.com/fenomen64/retro-home"
         const val USER_AGENT = "RetroHome/$VERSION (personal Android game launcher)"
     }
 }

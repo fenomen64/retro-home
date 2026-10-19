@@ -19,6 +19,13 @@
 Комментарии в коде на русском; новые можно писать на русском или английском.
 Все тексты интерфейса — в `app/src/main/java/com/retrohome/launcher/i18n/Strings.kt` (RU и EN).
 
+## Как выходят версии
+1. В `app/build.gradle.kts` повышаются `versionCode` и `versionName`.
+2. В `CHANGELOG.md` добавляется раздел `## <версия>` со списком изменений.
+3. После попадания в `main` GitHub Actions (`.github/workflows/release.yml`) собирает подписанный APK
+   и публикует релиз с описанием из CHANGELOG. Для подписи у репозитория должны быть секреты
+   `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`; в форках без них релиз просто пропускается.
+
 ## Чего не принимаем
 Ссылок на игры, BIOS и другие материалы, нарушающие авторские права.
 

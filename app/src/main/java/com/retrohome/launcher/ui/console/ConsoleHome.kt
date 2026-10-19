@@ -39,6 +39,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -53,6 +54,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
@@ -668,8 +670,30 @@ private fun TabBar(tabs: List<ConsoleTab>, current: Int, progress: String?, onSe
         verticalAlignment = Alignment.CenterVertically,
     ) {
         PadGlyph("L1", Modifier.clickable { onSelect((current - 1 + tabs.size) % tabs.size) })
+        val tabsState = rememberLazyListState()
+        val edgePx = with(androidx.compose.ui.platform.LocalDensity.current) { 24.dp.roundToPx() }
+        // Выбранная вкладка всегда видна целиком: ряд сдвигается ровно настолько, чтобы она вышла из-за края
+        // (в том числе при переходе с последней на первую по кругу)
+        LaunchedEffect(current, tabs.size) {
+            androidx.compose.runtime.withFrameNanos { }
+            val info = tabsState.layoutInfo
+            val item = info.visibleItemsInfo.firstOrNull { it.index == current }
+            if (item == null) {
+                tabsState.animateScrollToItem(current)
+                return@LaunchedEffect
+            }
+            val start = info.viewportStartOffset + edgePx
+            val end = info.viewportEndOffset - edgePx
+            when {
+                current == 0 -> tabsState.animateScrollToItem(0)
+                item.offset < start -> tabsState.animateScrollBy((item.offset - start).toFloat())
+                item.offset + item.size > end -> tabsState.animateScrollBy((item.offset + item.size - end).toFloat())
+            }
+        }
         LazyRow(
-            Modifier.weight(1f).padding(horizontal = 8.dp),
+            // Края ряда гаснут, если за ними есть ещё вкладки
+            Modifier.weight(1f).padding(horizontal = 8.dp).fadingSides(tabsState, 20.dp),
+            state = tabsState,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             contentPadding = PaddingValues(horizontal = 4.dp),
         ) {
@@ -678,6 +702,7 @@ private fun TabBar(tabs: List<ConsoleTab>, current: Int, progress: String?, onSe
                 val hl = LocalHighlight.current
                 Box(
                     Modifier
+                        .testTag("tab:${t.id}")
                         .clip(RoundedCornerShape(50))
                         .background(if (sel) hl ?: Palette.text else Color.Transparent)
                         .clickable { onSelect(i) }

@@ -126,6 +126,7 @@ interface SettingsActions {
     fun cycleIconPack(dir: Int = 1) {}
     fun editContact() {}
     fun editRaAccount() {}
+    fun openNetworkCheck() {}
 }
 
 /** Заголовок раздела настроек. */
@@ -303,6 +304,9 @@ fun SettingsScreen(
                 FocusRow(onClick = a::editContact) {
                     TitleAndDesc(s.contactEmail, s.contactEmailDesc, settings.contactEmail ?: s.notSet)
                 }
+            }
+            item {
+                FocusRow(onClick = a::openNetworkCheck) { TitleAndDesc(s.net.title, s.net.desc) }
             }
             item {
                 FocusRow(onClick = a::editRaAccount) {
@@ -885,6 +889,48 @@ fun RaAccountScreen(
             if (initialUser != null) FocusRow(onClick = {
                 scope.launch { onSave(null, null); onBack() }
             }) { TitleAndDesc(s.ra.raRemove) }
+        }
+    }
+}
+
+/** Проверка соединения: каждый сайт — работает или почему нет, с советом. */
+@Composable
+fun NetworkCheckScreen(
+    onBack: () -> Unit,
+    check: suspend (onEach: (com.retrohome.launcher.data.NetworkCheck.Result) -> Unit) -> Unit,
+) {
+    val s = LocalStrings.current
+    val results = remember { androidx.compose.runtime.mutableStateMapOf<String, com.retrohome.launcher.data.NetworkCheck.Result>() }
+    var running by remember { mutableStateOf(false) }
+    var round by remember { mutableStateOf(0) }
+    LaunchedEffect(round) {
+        results.clear()
+        running = true
+        try { check { r -> results[r.target.id] = r } } finally { running = false }
+    }
+    ScreenFrame(s.net.title, onBack) {
+        Column(Modifier.fillMaxSize().padding(horizontal = 4.dp).verticalScroll(rememberScrollState())) {
+            Text(s.net.intro, color = Palette.dim, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp))
+            Spacer(Modifier.height(6.dp))
+            com.retrohome.launcher.data.NetworkCheck.targets.forEach { t ->
+                val r = results[t.id]
+                val kind = r?.kind
+                val ok = kind == com.retrohome.launcher.data.NetworkCheck.Kind.OK
+                val desc = when {
+                    r == null -> if (running) s.net.checking else s.net.waiting
+                    ok -> s.net.ok.format(r.ms)
+                    // Совет и техническая причина — по ней можно понять, что именно не так
+                    else -> s.net.explain(kind!!) + "\n" + r.host + ": " + (r.error ?: "HTTP ${r.code}")
+                }
+                FocusRow(onClick = {}) {
+                    TitleAndDesc(s.net.label(t.id), desc, if (r == null) "…" else if (ok) "✓" else "✗")
+                }
+            }
+            if (!running && results.size == com.retrohome.launcher.data.NetworkCheck.targets.size &&
+                results.values.all { it.kind == com.retrohome.launcher.data.NetworkCheck.Kind.OK }) {
+                Text(s.net.allOk, color = Palette.accent, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+            }
+            FocusRow(onClick = { if (!running) round++ }) { TitleAndDesc(if (running) s.net.checking else s.net.again) }
         }
     }
 }

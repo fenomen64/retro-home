@@ -1,0 +1,74 @@
+name: Release
+
+# Новая версия (versionName в app/build.gradle.kts) попала в main — собрать подписанный APK
+# и опубликовать релиз с описанием из CHANGELOG.md. Если такой релиз уже есть — ничего не делать.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Version
+        id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HAS_KEY: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        run: |
+          v=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          if gh release view "v$v" > /dev/null 2>&1; then
+            echo "Релиз v$v уже опубликован"
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          elif [ "$HAS_KEY" != "true" ]; then
+            echo "::warning::Не задан секрет KEYSTORE_BASE64 — релиз v$v не создан (см. CONTRIBUTING.md)"
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-java@v6
+        if: steps.v.outputs.needed == 'true'
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v6
+        if: steps.v.outputs.needed == 'true'
+
+      - name: Signing key
+        if: steps.v.outputs.needed == 'true'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          mkdir -p keystore
+          echo "$KEYSTORE_BASE64" | base64 -d > keystore/release.jks
+          printf 'storeFile=keystore/release.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
+            "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > keystore.properties
+
+      - name: Build
+        if: steps.v.outputs.needed == 'true'
+        run: ./gradlew assembleRelease
+
+      - name: Publish
+        if: steps.v.outputs.needed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          V: ${{ steps.v.outputs.version }}
+        run: |
+          # Описание — раздел «## <версия>» из CHANGELOG.md
+          awk -v v="$V" '$0 ~ "^## " { f = ($2 == v); next } f' CHANGELOG.md > notes.md
+          [ -s notes.md ] || echo "Retro Home $V" > notes.md
+          cp app/build/outputs/apk/release/app-release.apk "RetroHome-$V.apk"
+          gh release create "v$V" "RetroHome-$V.apk" --title "Retro Home $V" --notes-file notes.md --target "$GITHUB_SHA"
+          rm -f keystore/release.jks keystore.properties

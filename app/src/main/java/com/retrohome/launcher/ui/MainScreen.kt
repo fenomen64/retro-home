@@ -36,7 +36,7 @@ import com.retrohome.launcher.ui.console.AudioState
 import com.retrohome.launcher.audio.LocalSfx
 import com.retrohome.launcher.audio.Sfx
 
-enum class Screen { SETTINGS, CONSOLE_APPS, HIDDEN_APPS, SEARCH, FOLDERS, SYSTEM_PICKER, EMULATORS, TITLE_EDIT, CONSOLE_TABS, WIDGETS, CONTACT, RA_ACCOUNT }
+enum class Screen { SETTINGS, CONSOLE_APPS, HIDDEN_APPS, SEARCH, FOLDERS, SYSTEM_PICKER, EMULATORS, TITLE_EDIT, CONSOLE_TABS, WIDGETS, CONTACT, RA_ACCOUNT, NETWORK_CHECK }
 
 /** Выбор режима: по повороту или принудительно из настроек. */
 fun isConsoleMode(mode: ModeOverride, landscape: Boolean) = when (mode) {
@@ -81,6 +81,7 @@ fun MainScreen(
     val meta by controller.metas.meta.collectAsState()
     val usageAccess by controller.usageAccess.collectAsState()
     val metaProgress by controller.metas.progress.collectAsState()
+    val netProblem by controller.metas.problem.collectAsState()
     val raState by controller.achievements.state.collectAsState()
     // Сводки достижений пересчитываются только при изменении прогресса или сопоставлений, не при каждой загрузке списка
     val raSummaries = remember(scan, raState.matches, raState.totals, raState.progress, raState.details) {
@@ -218,6 +219,7 @@ fun MainScreen(
             override fun cycleIconPack(dir: Int) = controller.cycleIconPack(dir)
             override fun editContact() = push(Screen.CONTACT)
             override fun editRaAccount() = push(Screen.RA_ACCOUNT)
+            override fun openNetworkCheck() = push(Screen.NETWORK_CHECK)
         }
     }
 
@@ -231,7 +233,8 @@ fun MainScreen(
                 swapAB = data.settings.swapAB,
                 actions = consoleActions,
                 active = stack.isEmpty(),
-                metaProgress = metaProgress?.let { (done, total) -> s.metaProgress.format(done, total) },
+                // Во время загрузки при сбоях сети — значок ⚠ (причина — в Настройки → «Проверка соединения»)
+                metaProgress = metaProgress?.let { (done, total) -> s.metaProgress.format(done, total) + if (netProblem != null) " ⚠" else "" },
                 audio = AudioState(data.settings.sfxPack, data.settings.music),
                 gamePage = data.settings.gamePage,
                 gameSort = data.settings.sortGames,
@@ -265,6 +268,7 @@ fun MainScreen(
                 usageAccess = usageAccess,
                 iconPackName = remember(data.settings.iconPack) { controller.iconPackName(data.settings.iconPack) },
             )
+            Screen.NETWORK_CHECK -> NetworkCheckScreen(::pop) { onEach -> controller.checkNetwork(onEach) }
             Screen.RA_ACCOUNT -> RaAccountScreen(
                 data.settings.raUser, data.settings.raKey, ::pop,
                 onSave = { u, k -> controller.setRaAccount(u, k) },

@@ -783,6 +783,59 @@ class ScreensTest {
         compose.onRoot().captureRoboImage("$SHOTS/38_ra_account.png")
     }
 
+    /** Вкладки, ушедшие за край, выезжают на экран при переключении (экран как у Retroid Pocket G2). */
+    @Test
+    @Config(qualifiers = "w640dp-h360dp-land-xxhdpi")
+    fun selectedTabAlwaysVisible() {
+        val systems = listOf(GS.GC, GS.SWITCH, GS.GBA, GS.PS1, GS.PS2, GS.PSP, GS.DC, GS.N64, GS.SNES, GS.NDS, GS.N3DS, GS.MD)
+        val games = systems.mapIndexed { i, sys -> com.retrohome.launcher.data.Game("g$i", "/r/$i", sys, "Game $i", emptyList(), sys.short) }
+        val gi = com.retrohome.launcher.ui.console.GamesInfo(games, true) { "RetroArch" }
+        val tabs = buildConsoleTabs(sampleApps, sampleData, RU, gi)
+        val state = ConsoleState()
+        // Как на скриншоте: идёт загрузка, справа счётчик — места под вкладки меньше
+        show { ConsoleHome(tabs, state, ModeOverride.AUTO, false, RecordingConsoleActions(), metaProgress = "⟳ 0/142") }
+        compose.waitForIdle()
+        fun assertTabVisible(step: String) {
+            val id = state.tabId
+            val node = compose.onNodeWithTag("tab:$id", useUnmergedTree = true).fetchSemanticsNode()
+            val visible = node.boundsInRoot.width
+            assertTrue("$step: вкладка $id видна на $visible из ${node.size.width} px", visible >= node.size.width - 1)
+        }
+        // R1 до конца и дальше по кругу на первую
+        repeat(tabs.size + 1) { i ->
+            compose.runOnIdle { pads.dispatch(Pad.R1) }
+            compose.waitForIdle()
+            assertTabVisible("R1 #${i + 1}")
+        }
+        compose.onRoot().captureRoboImage("$SHOTS/39_tabs_scrolled.png")
+        // L1 назад: с первой — на последнюю
+        repeat(3) { i ->
+            compose.runOnIdle { pads.dispatch(Pad.L1) }
+            compose.waitForIdle()
+            assertTabVisible("L1 #${i + 1}")
+        }
+    }
+
+    @Test
+    @Config(qualifiers = "w768dp-h432dp-land-xhdpi")
+    fun networkCheckScreen() {
+        val N = com.retrohome.launcher.data.NetworkCheck
+        val fake = listOf(
+            com.retrohome.launcher.data.NetworkCheck.Result(N.targets[0], 200, 180, null),
+            com.retrohome.launcher.data.NetworkCheck.Result(N.targets[1], 429, 950, null),
+            com.retrohome.launcher.data.NetworkCheck.Result(N.targets[2], 0, 15000, "SocketTimeoutException: timeout"),
+            com.retrohome.launcher.data.NetworkCheck.Result(N.targets[3], 0, 40, "UnknownHostException: Unable to resolve host \"www.wikidata.org\""),
+            com.retrohome.launcher.data.NetworkCheck.Result(N.targets[4], 0, 300, "SSLHandshakeException: Chain validation failed"),
+            com.retrohome.launcher.data.NetworkCheck.Result(N.targets[5], 200, 420, null),
+        )
+        show { com.retrohome.launcher.ui.NetworkCheckScreen(onBack = {}) { onEach -> fake.forEach(onEach) } }
+        compose.waitForIdle()
+        assertTrue(compose.onAllNodesWithText("Работает · 180 мс").fetchSemanticsNodes().isNotEmpty())
+        assertTrue(compose.onAllNodesWithText("Сайт ограничил запросы", substring = true).fetchSemanticsNodes().isNotEmpty())
+        assertTrue(compose.onAllNodesWithText("неверной даты и времени", substring = true).fetchSemanticsNodes().isNotEmpty())
+        compose.onRoot().captureRoboImage("$SHOTS/40_network_check.png")
+    }
+
     @Test
     @Config(qualifiers = "w768dp-h432dp-land-xhdpi")
     fun gamePageCanBeTurnedOff() {

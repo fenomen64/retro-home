@@ -246,6 +246,8 @@ data class Strings(
     val musicVolume: String,
     /** Тексты RetroAchievements (отдельно: у JVM предел в 255 параметров конструктора). */
     val ra: RaStrings,
+    /** Проверка соединения. */
+    val net: NetStrings,
 ) {
     val langName: String get() = if (lang == Lang.RU) "Русский" else "English"
 
@@ -410,7 +412,7 @@ val RU = Strings(
     englishOnly = "Описания на русском нет — показан английский текст",
     russianOnly = "Описания на английском нет — показан русский текст",
     updateMeta = "Обновить обложки и описания",
-    metaProgress = "Обложки: %d из %d",
+    metaProgress = "⟳ %d/%d",
     autoMeta = "Загружать обложки и описания",
     autoMetaDesc = "Обложки из базы libretro, описания из Википедии. Нужен интернет один раз — потом всё хранится на устройстве",
     wikiSource = "Текст: Википедия, CC BY-SA",
@@ -447,8 +449,8 @@ val RU = Strings(
     select = "Выбрать",
     lookupLog = "Как искалось описание",
     contactEmail = "Почта для Википедии",
-    contactEmailDesc = "С ней обложки и описания ищутся в десятки раз быстрее",
-    contactEmailLong = "Википедия просит программы указывать почту для связи и тем, кто её указал, разрешает 200 запросов в минуту вместо 10. Тогда описания загружаются за секунды, а не за минуты на игру. Почта уходит только в Википедию и Викиданные — в подписи запросов; письма не приходят.",
+    contactEmailDesc = "Необязательно: лаунчер и так представляется Википедии адресом проекта",
+    contactEmailLong = "Википедия требует, чтобы программы указывали, как с ними связаться, и режет запросы от тех, кто этого не делает. Лаунчер по умолчанию указывает адрес своей страницы на GitHub, поэтому почта не обязательна. Если хотите, добавьте свою — она уйдёт только в Википедию и Викиданные, в подписи запросов; письма не приходят.",
     contactInvalid = "Похоже, это не адрес почты",
     contactRemove = "Убрать почту",
     notSet = "Не указана",
@@ -530,6 +532,32 @@ val RU = Strings(
     pickMusic = "Выбрать свою мелодию",
     pickMusicDesc = "Любой аудиофайл с устройства, будет играть по кругу",
     musicVolume = "Громкость музыки",
+    net = NetStrings(
+        title = "Проверка соединения",
+        desc = "Почему не грузятся обложки и описания",
+        intro = "Лаунчер по очереди обращается к сайтам, откуда берёт обложки, описания и достижения, и показывает, что не так. Если что-то не работает — пришлите скриншот этого экрана.",
+        again = "Проверить ещё раз",
+        checking = "Проверяю…",
+        waiting = "ждёт очереди",
+        ok = "Работает · %d мс",
+        allOk = "Все сайты отвечают. Если описания всё равно не грузятся — нажмите START → «Обновить обложки и описания».",
+        lCovers = "Обложки и снимки (libretro)",
+        lWikiEn = "Википедия (английская)",
+        lWikiRu = "Википедия (русская)",
+        lWikidata = "Викиданные",
+        lSwitch = "Игры Switch (tinfoil.media)",
+        lRa = "RetroAchievements",
+        kNoDns = "Не удаётся найти сайт: нет интернета, не работает DNS или сайт заблокирован. Попробуйте другую сеть; в настройках Android проверьте «Частный DNS».",
+        kTimeout = "Сайт не отвечает: соединение слишком медленное или блокируется. Попробуйте другую сеть или VPN.",
+        kRefused = "Соединение отклонено: сайт недоступен из этой сети. Попробуйте другую сеть или VPN.",
+        kTls = "Ошибка защищённого соединения. Чаще всего из-за неверной даты и времени на устройстве; также бывает из-за VPN, антивируса или фильтра в сети.",
+        kLimit = "Сайт ограничил запросы с вашего адреса (так бывает с VPN и мобильным интернетом, где один адрес у многих). Укажите почту для Википедии в настройках — с ней лимит выше — и попробуйте позже.",
+        kRejected = "Сайт отклонил запрос (часто — фильтр против роботов для адресов VPN). Попробуйте без VPN или другую сеть.",
+        kServer = "Сайт временно не работает. Попробуйте позже.",
+        kPermission = "У лаунчера нет доступа к интернету. Проверьте разрешения приложения и брандмауэр (на некоторых прошивках доступ к сети выдаётся отдельно).",
+        kOther = "Не удалось соединиться.",
+        problemHint = "Не удаётся загрузить данные — подробности в Настройки → «Проверка соединения»",
+    ),
     ra = RaStrings(
         achievements = "Достижения",
         achProgress = "%1\$d из %2\$d · %3\$d%%",
@@ -675,7 +703,7 @@ val EN = Strings(
     englishOnly = "No Russian description — showing the English one",
     russianOnly = "No English description — showing the Russian one",
     updateMeta = "Refresh covers and descriptions",
-    metaProgress = "Covers: %d of %d",
+    metaProgress = "⟳ %d/%d",
     autoMeta = "Download covers and descriptions",
     autoMetaDesc = "Covers from libretro, descriptions from Wikipedia. Needs internet once — then everything is stored on the device",
     wikiSource = "Text: Wikipedia, CC BY-SA",
@@ -712,8 +740,8 @@ val EN = Strings(
     select = "Select",
     lookupLog = "How the description was found",
     contactEmail = "Email for Wikipedia",
-    contactEmailDesc = "With it, descriptions load dozens of times faster",
-    contactEmailLong = "Wikipedia asks apps to include a contact email and allows them 200 requests a minute instead of 10, so descriptions load in seconds instead of minutes per game. The email goes only to Wikipedia and Wikidata, in the request signature; no emails are sent to you.",
+    contactEmailDesc = "Optional: the launcher already identifies itself to Wikipedia with the project page",
+    contactEmailLong = "Wikipedia requires apps to say how to contact them and throttles those that don't. By default the launcher includes its GitHub page, so an email is optional. If you add one, it goes only to Wikipedia and Wikidata in the request signature; no emails are sent to you.",
     contactInvalid = "That doesn't look like an email address",
     contactRemove = "Remove email",
     notSet = "Not set",
@@ -795,6 +823,32 @@ val EN = Strings(
     pickMusic = "Choose your own track",
     pickMusicDesc = "Any audio file from the device, played on a loop",
     musicVolume = "Music volume",
+    net = NetStrings(
+        title = "Connection check",
+        desc = "Why covers and descriptions don't load",
+        intro = "The launcher contacts each site it gets covers, descriptions and achievements from and shows what's wrong. If something fails, send a screenshot of this screen.",
+        again = "Check again",
+        checking = "Checking…",
+        waiting = "waiting",
+        ok = "Works · %d ms",
+        allOk = "All sites respond. If descriptions still don't load, press START → \"Refresh covers and descriptions\".",
+        lCovers = "Covers and snaps (libretro)",
+        lWikiEn = "Wikipedia (English)",
+        lWikiRu = "Wikipedia (Russian)",
+        lWikidata = "Wikidata",
+        lSwitch = "Switch games (tinfoil.media)",
+        lRa = "RetroAchievements",
+        kNoDns = "Can't find the site: no internet, DNS isn't working, or the site is blocked. Try another network and check Android's Private DNS setting.",
+        kTimeout = "The site doesn't respond: the connection is too slow or blocked. Try another network or a VPN.",
+        kRefused = "Connection refused: the site isn't reachable from this network. Try another network or a VPN.",
+        kTls = "Secure connection failed. Usually caused by a wrong date and time on the device; VPNs, antivirus apps or network filters can also cause it.",
+        kLimit = "The site is rate-limiting your address (common with VPNs and mobile internet, where many people share one address). Add an email for Wikipedia in Settings for a higher limit and try again later.",
+        kRejected = "The site rejected the request (often a bot filter for VPN addresses). Try without a VPN or on another network.",
+        kServer = "The site is temporarily down. Try again later.",
+        kPermission = "The launcher has no internet access. Check the app's permissions and any firewall (some firmwares grant network access separately).",
+        kOther = "Couldn't connect.",
+        problemHint = "Can't load data — see Settings → Connection check",
+    ),
     ra = RaStrings(
         achievements = "Achievements",
         achProgress = "%1\$d of %2\$d · %3\$d%%",
@@ -860,3 +914,48 @@ data class RaStrings(
     val raNet: String,
     val raRemove: String,
 )
+
+/** Тексты проверки соединения. */
+data class NetStrings(
+    val title: String,
+    val desc: String,
+    val intro: String,
+    val again: String,
+    val checking: String,
+    val waiting: String,
+    val ok: String,
+    val allOk: String,
+    val lCovers: String,
+    val lWikiEn: String,
+    val lWikiRu: String,
+    val lWikidata: String,
+    val lSwitch: String,
+    val lRa: String,
+    val kNoDns: String,
+    val kTimeout: String,
+    val kRefused: String,
+    val kTls: String,
+    val kLimit: String,
+    val kRejected: String,
+    val kServer: String,
+    val kPermission: String,
+    val kOther: String,
+    val problemHint: String,
+) {
+    fun label(id: String) = when (id) {
+        "covers" -> lCovers; "wikiEn" -> lWikiEn; "wikiRu" -> lWikiRu; "wikidata" -> lWikidata; "switch" -> lSwitch; else -> lRa
+    }
+
+    fun explain(kind: com.retrohome.launcher.data.NetworkCheck.Kind) = when (kind) {
+        com.retrohome.launcher.data.NetworkCheck.Kind.OK -> ""
+        com.retrohome.launcher.data.NetworkCheck.Kind.NO_DNS -> kNoDns
+        com.retrohome.launcher.data.NetworkCheck.Kind.TIMEOUT -> kTimeout
+        com.retrohome.launcher.data.NetworkCheck.Kind.REFUSED -> kRefused
+        com.retrohome.launcher.data.NetworkCheck.Kind.TLS -> kTls
+        com.retrohome.launcher.data.NetworkCheck.Kind.LIMIT -> kLimit
+        com.retrohome.launcher.data.NetworkCheck.Kind.REJECTED -> kRejected
+        com.retrohome.launcher.data.NetworkCheck.Kind.SERVER -> kServer
+        com.retrohome.launcher.data.NetworkCheck.Kind.NO_PERMISSION -> kPermission
+        com.retrohome.launcher.data.NetworkCheck.Kind.OTHER -> kOther
+    }
+}

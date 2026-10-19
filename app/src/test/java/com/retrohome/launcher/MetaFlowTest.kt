@@ -162,6 +162,38 @@ class MetaFlowTest {
         assertEquals(before, t.calls.size)
     }
 
+    @Test fun networkProblemIsExplainedInLog() {
+        // Обложки грузятся, а Википедия не отвечает: в журнале — какой сайт и почему
+        val t = Fake { url ->
+            when {
+                "thumbnails.libretro.com" in url && url.endsWith("/Named_Boxarts/") -> ok(gcIndex)
+                "thumbnails.libretro.com" in url -> HttpResponse(200, png)
+                else -> HttpResponse(0, error = "SocketTimeoutException: timeout")
+            }
+        }
+        val r = repo(t)
+        val m = runFetch(r, listOf(skies))["sk"]!!
+        val log = m.lookupLog.joinToString("\n")
+        assertTrue(log, m.lookupLog.any { "en.wikipedia.org: SocketTimeoutException" in it })
+        assertTrue(log, m.lookupLog.any { "Проверка соединения" in it })
+        assertFalse(m.descTried)
+        assertNotNull(r.problem.value)
+    }
+
+    @Test fun rejectedRequestIsRetriedLater() {
+        // 403 — сайт отклонил запрос (фильтр против роботов): это не «описания нет», а повод повторить позже
+        val t = Fake { url ->
+            when {
+                "thumbnails.libretro.com" in url && url.endsWith("/Named_Boxarts/") -> ok(gcIndex)
+                "thumbnails.libretro.com" in url -> HttpResponse(200, png)
+                else -> HttpResponse(403)
+            }
+        }
+        val m = runFetch(repo(t), listOf(skies))["sk"]!!
+        assertFalse(m.descTried)
+        assertTrue(m.retryAt > System.currentTimeMillis())
+    }
+
     @Test fun realNotFoundIsRemembered() {
         val t = Fake { url ->
             when {
@@ -407,6 +439,8 @@ class MetaFlowTest {
         var email: String? = null
         val r = MetaRepository(app, CoroutineScope(SupervisorJob() + Dispatchers.IO), t, sleep = {}, isOnline = { true }, contact = { email })
         assertFalse(r.userAgent().contains("@"))
+        // Без почты лаунчер всё равно представляется — адресом страницы проекта
+        assertTrue(r.userAgent(), r.userAgent().contains(MetaRepository.PROJECT_URL))
         email = "player@example.com"
         assertTrue(r.userAgent(), r.userAgent().startsWith("RetroHome/") && r.userAgent().contains("player@example.com"))
         runFetch(r, listOf(skies))

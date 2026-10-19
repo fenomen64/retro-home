@@ -617,3 +617,23 @@ class StringsLimitTest {
         assertEquals("Achievements", com.retrohome.launcher.i18n.EN.ra.achievements)
     }
 }
+
+/** Причины сетевых сбоев переводятся в понятные объяснения. */
+class NetworkCheckTest {
+    private val N = com.retrohome.launcher.data.NetworkCheck
+    @Test fun classify() {
+        assertEquals(com.retrohome.launcher.data.NetworkCheck.Kind.OK, N.classify(200, null))
+        assertEquals(com.retrohome.launcher.data.NetworkCheck.Kind.LIMIT, N.classify(429, null))
+        assertEquals(com.retrohome.launcher.data.NetworkCheck.Kind.REJECTED, N.classify(403, null))
+        assertEquals(com.retrohome.launcher.data.NetworkCheck.Kind.SERVER, N.classify(503, null))
+        assertEquals(com.retrohome.launcher.data.NetworkCheck.Kind.NO_DNS, N.classify(0, "UnknownHostException: Unable to resolve host"))
+        assertEquals(com.retrohome.launcher.data.NetworkCheck.Kind.TIMEOUT, N.classify(0, "SocketTimeoutException: timeout"))
+        assertEquals(com.retrohome.launcher.data.NetworkCheck.Kind.TLS, N.classify(0, "SSLHandshakeException: Chain validation failed"))
+        assertEquals(com.retrohome.launcher.data.NetworkCheck.Kind.NO_PERMISSION, N.classify(0, "SecurityException: Permission denied (missing INTERNET permission?)"))
+        assertEquals(com.retrohome.launcher.data.NetworkCheck.Kind.REFUSED, N.classify(0, "ConnectException: Failed to connect"))
+        for (k in com.retrohome.launcher.data.NetworkCheck.Kind.entries.filter { it != com.retrohome.launcher.data.NetworkCheck.Kind.OK }) {
+            assertTrue(com.retrohome.launcher.i18n.RU.net.explain(k).isNotBlank())
+            assertTrue(com.retrohome.launcher.i18n.EN.net.explain(k).isNotBlank())
+        }
+    }
+}

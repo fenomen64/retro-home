@@ -445,7 +445,7 @@ private fun PageButtonView(b: PageButton, e: ConsoleEntry, selected: Boolean, on
 }
 
 /** Ряд кнопок гаснет по краям, если за краем есть ещё кнопки. */
-private fun Modifier.fadingSides(state: androidx.compose.foundation.lazy.LazyListState, edge: Dp = 28.dp): Modifier = this
+internal fun Modifier.fadingSides(state: androidx.compose.foundation.lazy.LazyListState, edge: Dp = 28.dp): Modifier = this
     .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
     .drawWithContent {
         drawContent()
