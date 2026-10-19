@@ -19,6 +19,8 @@ object NetworkCheck {
         Target("wikiRu", "https://ru.wikipedia.org/w/api.php?action=query&meta=siteinfo&format=json"),
         Target("wikidata", "https://www.wikidata.org/w/api.php?action=query&meta=siteinfo&format=json"),
         Target("switch", "https://tinfoil.media/"),
+        // Запасной источник данных Switch, если tinfoil недоступен
+        Target("switchMirror", "https://api.nlib.cc/nx/0100F2C0115B6000?fields=name"),
         // Не главная страница (она закрыта защитой от роботов), а тот же API, что использует лаунчер.
         // Без ключа он отвечает «нужен ключ» — значит, сайт доступен
         Target("ra", "https://retroachievements.org/API/API_GetConsoleIDs.php", unauthorizedIsOk = true),

@@ -694,6 +694,24 @@ object SwitchDb {
     fun iconUrl(id: String) = "https://tinfoil.media/ti/$id/512/512/"
     fun pageUrl(id: String) = "https://tinfoil.media/Title/$id"
 
+    // --- Запасной источник: Nlib API (api.nlib.cc, база TitleDB) — по Title ID ---
+    // (tinfoil.media у части провайдеров не открывается)
+    const val NLIB = "https://api.nlib.cc/nx"
+    fun nlibInfoUrl(id: String) = "$NLIB/$id?fields=name,description,screens"
+    fun nlibIconUrl(id: String) = "$NLIB/$id/icon/512"
+
+    /** Ответ Nlib: название, описание из eShop и снимки экрана. */
+    fun parseNlib(json: String): Page? = runCatching {
+        val o = kotlinx.serialization.json.Json.parseToJsonElement(json).jsonObject
+        val name = o["name"]?.let { (it as? JsonPrimitive)?.contentOrNullSafe() }?.let(::clean)?.ifEmpty { null }
+        val desc = o["description"]?.let { (it as? JsonPrimitive)?.contentOrNullSafe() }?.let { shorten(it) }
+        val shots = (o["screens"] as? JsonObject)?.get("screenshots")?.let { it as? JsonArray }
+            ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNullSafe()?.replaceFirst("http://", "https://") }.orEmpty()
+        if (name == null && desc == null) null else Page(name, desc, shots)
+    }.getOrNull()
+
+    private fun JsonPrimitive.contentOrNullSafe(): String? = if (this is kotlinx.serialization.json.JsonNull) null else content
+
     // 16 шестнадцатеричных цифр, начинается с 01; базовая игра кончается на 000, обновление — на 800
     private val idRe = Regex("""(?i)(?<![0-9a-f])(01[0-9a-f]{11})([08])00(?![0-9a-f])""")
 

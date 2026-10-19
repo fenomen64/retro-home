@@ -575,12 +575,18 @@ class MetaRepository(
         switchIndex?.let { return it }
         val file = File(indexDir, "SWITCH_tinfoil.tsv")
         val fresh = file.exists() && System.currentTimeMillis() - file.lastModified() < 7L * 24 * 3600 * 1000
-        val entries = if (fresh) {
-            file.readLines().mapNotNull { l -> l.split('\t', limit = 2).takeIf { it.size == 2 }?.let { it[0] to it[1] } }
-        } else {
-            val body = get(SwitchDb.LIST_URL) ?: return null
-            SwitchDb.parseList(body).also { list ->
-                if (list.isNotEmpty()) file.writeText(list.joinToString("\n") { "${it.first}\t${it.second}" })
+        fun cached() = file.readLines().mapNotNull { l -> l.split('\t', limit = 2).takeIf { it.size == 2 }?.let { it[0] to it[1] } }
+        val entries = if (fresh) cached() else {
+            val body = get(SwitchDb.LIST_URL)
+            val list = body?.let(SwitchDb::parseList).orEmpty()
+            when {
+                list.isNotEmpty() -> list.also { file.writeText(it.joinToString("\n") { e -> "${e.first}\t${e.second}" }) }
+                // tinfoil не ответил — старый список лучше, чем никакого (игры почти не меняют Title ID)
+                file.exists() && file.length() > 0 -> cached().also { DiagLog.add("Список игр Switch: tinfoil недоступен, взят сохранённый (${it.size})") }
+                else -> {
+                    DiagLog.add("Список игр Switch: tinfoil недоступен (${lastProblem.get() ?: "?"}) — игры без Title ID в имени файла не опознать")
+                    return null
+                }
             }
         }
         if (entries.isEmpty()) return null
@@ -594,14 +600,22 @@ class MetaRepository(
             val idx = runCatching { switchIndex() }.getOrNull() ?: return@lazy SwitchDb.titleId(game.fileName)
             Thumbnails.match(game.fileName, idx.index, title)?.let { idx.idByName[it] } ?: SwitchDb.titleId(game.fileName)
         }
-        val page: SwitchDb.Page? by lazy { id?.let { get(SwitchDb.pageUrl(it)) }?.let(SwitchDb::parsePage) }
+        val page: SwitchDb.Page? by lazy {
+            val tid = id ?: return@lazy null
+            get(SwitchDb.pageUrl(tid))?.let(SwitchDb::parsePage)?.let { return@lazy it }
+            // tinfoil не ответил или страницы нет — запасной источник Nlib (по тому же Title ID)
+            get(SwitchDb.nlibInfoUrl(tid))?.let(SwitchDb::parseNlib)
+                ?.also { DiagLog.add("[SWITCH] ${game.title}: данные из запасного источника (api.nlib.cc)") }
+        }
         val name: String? get() = id?.let { i -> switchIndex?.byId?.get(i) } ?: page?.name
     }
 
     private fun fetchSwitchCover(sw: SwitchLookup): Triple<String, String?, String?>? {
         val id = sw.id ?: return null
-        val bytes = getBytes(SwitchDb.iconUrl(id)) ?: return null
-        val icon = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return null
+        // Сначала tinfoil, а если он не ответил или прислал не картинку — запасной источник Nlib
+        val icon = listOf(SwitchDb.iconUrl(id), SwitchDb.nlibIconUrl(id)).firstNotNullOfOrNull { url ->
+            getBytes(url)?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
+        } ?: return null.also { DiagLog.add("[SWITCH] ${sw.game.title}: иконка не загрузилась (${lastProblem.get() ?: "нет в базах"})") }
         val poster = switchPoster(icon)
         icon.recycle()
         val out = saveCover(sw.game, poster)
@@ -880,7 +894,7 @@ class MetaRepository(
     }
 
     companion object {
-        const val VERSION = "0.33"
+        const val VERSION = "0.34"
         /** Страница проекта — контакт в подписи запросов (Issues для связи). */
         const val PROJECT_URL = "https://github.com/fenomen64/retro-home"
         const val USER_AGENT = "RetroHome/$VERSION (personal Android game launcher)"
