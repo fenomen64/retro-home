@@ -6,6 +6,11 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
 import androidx.compose.foundation.background
+import org.junit.Assert.assertNotEquals
+import androidx.compose.ui.test.assertIsNotFocused
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -17,6 +22,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.assertIsFocused
@@ -1458,6 +1464,67 @@ class NavigationUiTest {
         compose.onRoot().captureRoboImage("$SHOTS/50_settings_menu.png")
     }
 
+    @OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
+    @Test
+    @Config(qualifiers = "w768dp-h432dp-land-xhdpi")
+    fun settingsCursorStopsAtListEdgesAndDpadSounds() {
+        val nav = com.retrohome.launcher.ui.SettingsNav()
+        nav.section = "GAMES"
+        show(sounds = true) {
+            val im = androidx.compose.ui.platform.LocalInputModeManager.current
+            androidx.compose.runtime.LaunchedEffect(Unit) { im.requestInputMode(androidx.compose.ui.input.InputMode.Keyboard) }
+            // Как в приложении: под настройками лежит главный экран со своими кнопками
+            androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
+                androidx.compose.foundation.layout.Box(
+                    Modifier.align(androidx.compose.ui.Alignment.BottomCenter)
+                        .testTag("under")
+                        .focusable()
+                ) { androidx.compose.material3.Text("под низом") }
+                androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black)) {
+                    SettingsScreen(Settings(), "0.1", focusFirst = true, onBack = {}, a = noop, nav = nav)
+                }
+            }
+        }
+        compose.waitForIdle()
+        val first = focusedText()
+        // Курсор, поставленный при открытии, — без звука
+        compose.runOnIdle { assertEquals(0, sfx.played.count { it == Sfx.MOVE }) }
+        // Вниз до упора и ещё дальше
+        repeat(40) { compose.onRoot().performKeyInput { pressKey(Key.DirectionDown) }; compose.waitForIdle() }
+        compose.onNodeWithTag("under").assertIsNotFocused()
+        val last = focusedText()
+        assertNotEquals(first, last)
+        val moves = sfx.played.count { it == Sfx.MOVE }
+        assertTrue("крестовина звучит: $moves", moves >= 3)
+        // У последней строки курсор упирается: ещё вниз — стоит на месте и не звучит
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionDown) }
+        compose.waitForIdle()
+        assertEquals(last, focusedText())
+        assertEquals(moves, sfx.played.count { it == Sfx.MOVE })
+        // Вверх — сразу на соседнюю строку, со звуком
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionUp) }
+        compose.waitForIdle()
+        assertNotEquals(last, focusedText())
+        assertEquals(moves + 1, sfx.played.count { it == Sfx.MOVE })
+        // Вверх до упора: курсор не уходит ни на «‹» в заголовке, ни куда-либо ещё
+        repeat(40) { compose.onRoot().performKeyInput { pressKey(Key.DirectionUp) }; compose.waitForIdle() }
+        assertEquals(first, focusedText())
+        compose.onAllNodesWithText("‹")[0].assertIsNotFocused()
+        compose.onNodeWithTag("under").assertIsNotFocused()
+    }
+
+    private fun focusedText(): String {
+        val node = compose.onNode(androidx.compose.ui.test.isFocused()).fetchSemanticsNode()
+        val texts = mutableListOf<String>()
+        fun walk(n: androidx.compose.ui.semantics.SemanticsNode) {
+            if (androidx.compose.ui.semantics.SemanticsProperties.Text in n.config)
+                n.config[androidx.compose.ui.semantics.SemanticsProperties.Text].forEach { t -> texts.add(t.text) }
+            n.children.forEach { walk(it) }
+        }
+        walk(node)
+        return texts.joinToString(" | ")
+    }
+
     private fun gcGames(): com.retrohome.launcher.ui.console.GamesInfo {
         val games = listOf("Skies of Arcadia", "Tales of Symphonia", "Wind Waker").mapIndexed { i, t ->
             com.retrohome.launcher.data.Game("g$i", "/r/g$i.iso", GS.GC, t, emptyList(), "gc")
@@ -1488,6 +1555,26 @@ class NavigationUiTest {
         compose.runOnIdle { assertEquals(first, state.selected(tabs)!!.key) }
         compose.runOnIdle { pads.dispatch(Pad.RIGHT) }
         compose.runOnIdle { assertEquals(second, state.selected(tabs)!!.key) }
+    }
+
+    @Test
+    @Config(qualifiers = "w768dp-h432dp-land-xhdpi")
+    fun gamesRowShowsOnlyTitleAndBigCovers() {
+        val state = ConsoleState().apply { tabId = "sys:GC" }
+        val tabs = buildConsoleTabs(sampleApps, sampleData, RU, gcGames())
+        show { ConsoleHome(tabs, state, ModeOverride.AUTO, false, RecordingConsoleActions()) }
+        compose.waitForIdle()
+        compose.onRoot().captureRoboImage("$SHOTS/52_games_row.png")
+        // Под рядом — только название; описания и прочих сведений нет
+        compose.onNodeWithTag("rowTitle", useUnmergedTree = true).assertTextEquals("Skies of Arcadia")
+        compose.onAllNodesWithText("Описание игры.", substring = true).assertCountEquals(0)
+        // Обложки заметно крупнее прежнего потолка в 168dp
+        val h = compose.onAllNodesWithText("Tales of Symphonia", useUnmergedTree = true).fetchSemanticsNodes().size
+        val card = compose.onRoot().fetchSemanticsNode()
+        val density = card.layoutInfo.density.density
+        val cards = compose.onAllNodes(androidx.compose.ui.test.hasClickAction()).fetchSemanticsNodes()
+            .map { it.boundsInRoot.height / density }
+        assertTrue("высота карточек: $cards ($h)", cards.any { it > 200f })
     }
 
     @Test
@@ -1529,7 +1616,13 @@ class NavigationUiTest {
                 onButton = {}, onBack = {}, onOptions = {}, onFavorite = {}, onSwitch = { switched += it })
         }
         compose.onRoot().captureRoboImage("$SHOTS/51_page_arrows.png")
-        // Стрелки у краёв обложки
+        // Стрелки у краёв страницы, под большими пальцами: левая — слева от обложки, правая — у правого края
+        val cover = compose.onNodeWithTag("pageCover", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val prev = compose.onNodeWithTag("prevGame", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val next = compose.onNodeWithTag("nextGame", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val width = compose.onRoot().fetchSemanticsNode().boundsInRoot.width
+        assertTrue("левая стрелка не на обложке", prev.right <= cover.left)
+        assertTrue("правая стрелка у правого края", next.left > cover.right && width - next.right < width * 0.06f)
         compose.onNodeWithTag("nextGame", useUnmergedTree = true).performClick()
         compose.onNodeWithTag("prevGame", useUnmergedTree = true).performClick()
         // Свайп по странице: влево — следующая игра, вправо — предыдущая

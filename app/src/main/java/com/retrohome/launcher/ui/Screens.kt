@@ -46,6 +46,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
@@ -94,9 +96,29 @@ fun ScreenFrame(title: String, onBack: () -> Unit, content: @Composable () -> Un
             )
             Text(title, color = Palette.text, fontSize = 20.sp, fontWeight = FontWeight.Bold)
         }
-        Box(Modifier.weight(1f)) { content() }
+        val navKeys = remember { NavKeys() }
+        Box(
+            Modifier
+                .weight(1f)
+                // Запоминаем нажатия крестовины — по ним звучит перемещение курсора
+                .onPreviewKeyEvent { ev ->
+                    if (ev.type == androidx.compose.ui.input.key.KeyEventType.KeyDown && ev.key in NAV_KEYS) navKeys.at = uptimeMs()
+                    false
+                }
+                // Курсор не уходит за края списка: ни на кнопку «‹» в заголовке, ни на экран под этим
+                // (главный экран остаётся под настройками) — у первой и последней строки он упирается
+                .focusProperties { onExit = { cancelFocusChange() } }
+                .focusGroup()
+        ) {
+            CompositionLocalProvider(LocalNavKeys provides navKeys) { content() }
+        }
     }
 }
+
+private val NAV_KEYS = setOf(
+    androidx.compose.ui.input.key.Key.DirectionUp, androidx.compose.ui.input.key.Key.DirectionDown,
+    androidx.compose.ui.input.key.Key.DirectionLeft, androidx.compose.ui.input.key.Key.DirectionRight,
+)
 
 interface SettingsActions {
     fun toggleLang()

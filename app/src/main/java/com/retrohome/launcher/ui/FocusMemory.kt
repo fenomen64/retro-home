@@ -57,5 +57,16 @@ class SettingsNav {
     }
 }
 
+/**
+ * Когда на экране последний раз нажимали крестовину. Курсор, пришедший на строку сразу после
+ * нажатия, — это перемещение (звучит); курсор, поставленный при открытии экрана или раздела, — нет.
+ */
+class NavKeys {
+    var at: Long = Long.MIN_VALUE / 2
+    fun recent() = uptimeMs() - at < 400
+}
+
+val LocalNavKeys = staticCompositionLocalOf<NavKeys?> { null }
+
 /** Время для «тихого» первого фокуса: курсор, поставленный при открытии экрана, не звучит. */
 internal fun uptimeMs() = SystemClock.uptimeMillis()

@@ -230,10 +230,20 @@ fun FocusRow(
     val sfx = com.retrohome.launcher.audio.LocalSfx.current
     val shownAt = remember { uptimeMs() }
     val memory = LocalFocusMemory.current
+    val navKeys = LocalNavKeys.current
+    // Своё «был ли фокус» — не зависит от порядка, в котором Compose вызывает обработчики фокуса
+    val had = remember { booleanArrayOf(false) }
     Box(
         modifier
             .then(if (id != null) Modifier.rememberFocus(id) else Modifier)
-            .onFocusChanged { if (sounds && it.isFocused && !focused && uptimeMs() - shownAt > 300) sfx.play(com.retrohome.launcher.audio.Sfx.MOVE) }
+            .onFocusChanged {
+                val gained = it.isFocused && !had[0]
+                had[0] = it.isFocused
+                // Внутри экрана — по нажатию крестовины (строка могла только что появиться при прокрутке);
+                // вне экрана-рамки — как раньше, кроме курсора, поставленного при открытии
+                val byKey = navKeys?.recent() ?: (uptimeMs() - shownAt > 300)
+                if (sounds && gained && byKey) sfx.play(com.retrohome.launcher.audio.Sfx.MOVE)
+            }
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 3.dp)
             .clip(RoundedCornerShape(14.dp))

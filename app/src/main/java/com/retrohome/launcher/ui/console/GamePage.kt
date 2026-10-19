@@ -185,11 +185,17 @@ fun GamePage(
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.6f to Color.Transparent, 1f to Palette.bgBottom.copy(alpha = 0.9f))))
 
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
-            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(start = 36.dp, end = 36.dp, top = 20.dp, bottom = 8.dp)) {
+            // Со стрелками переключения поля уже: стрелки сами стоят у краёв экрана, под большими пальцами
+            val side = if (canSwitch) 4.dp else 36.dp
+            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(start = side, end = side, top = 20.dp, bottom = 8.dp)) {
                 // Обложка целиком, в своих пропорциях: высота — по экрану, но не шире 42% страницы
                 val ar = com.retrohome.launcher.ui.coverAspect(cover)
-                val coverHeight = minOf(maxHeight * 0.92f, maxWidth * 0.42f / ar)
+                val contentWidth = if (canSwitch) maxWidth - (ARROW_SPACE * 2) else maxWidth
+                val coverHeight = minOf(maxHeight * 0.92f, contentWidth * 0.42f / ar)
                 Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+                    // Предыдущая игра — слева от обложки, под левым большим пальцем
+                    if (canSwitch) SwitchArrow("‹", Modifier.testTag("prevGame")) { onSwitch(-1) }
+                Row(Modifier.weight(1f).fillMaxHeight(), verticalAlignment = Alignment.CenterVertically) {
                     // Обложка
                     Box(
                         Modifier
@@ -206,11 +212,6 @@ fun GamePage(
                             e.label, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(14.dp),
                         )
-                        // Стрелки для пальца: предыдущая и следующая игра (на консоли — L1/R1)
-                        if (canSwitch) {
-                            SwitchArrow("‹", Modifier.align(Alignment.CenterStart).testTag("prevGame")) { onSwitch(-1) }
-                            SwitchArrow("›", Modifier.align(Alignment.CenterEnd).testTag("nextGame")) { onSwitch(1) }
-                        }
                     }
                     Spacer(Modifier.width(32.dp))
                     Column(Modifier.weight(1f).fillMaxHeight()) {
@@ -274,6 +275,9 @@ fun GamePage(
                             }
                         }
                     }
+                }
+                    // Следующая игра — справа от описания, под правым большим пальцем
+                    if (canSwitch) SwitchArrow("›", Modifier.testTag("nextGame")) { onSwitch(1) }
                 }
             }
             // Подсказки кнопок
@@ -486,18 +490,22 @@ internal fun Modifier.fadingSides(state: androidx.compose.foundation.lazy.LazyLi
     }
 
 
-/** Полупрозрачная круглая стрелка у края обложки — переключить игру пальцем. */
+/** Место под стрелку у края страницы (сама стрелка и отступы вокруг). */
+private val ARROW_SPACE = 56.dp
+
+/** Полупрозрачная круглая стрелка у края страницы — переключить игру пальцем. */
 @Composable
 private fun SwitchArrow(glyph: String, modifier: Modifier, onClick: () -> Unit) {
     Box(
         modifier
-            .padding(6.dp)
-            .size(44.dp)
+            .padding(horizontal = 4.dp, vertical = 6.dp)
+            .size(48.dp)
             .clip(RoundedCornerShape(50))
-            .background(Color.Black.copy(alpha = 0.38f))
+            .background(Palette.surfaceHi.copy(alpha = 0.9f))
+            .border(1.dp, Palette.text.copy(alpha = 0.12f), RoundedCornerShape(50))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Text(glyph, color = Color.White.copy(alpha = 0.92f), fontSize = 26.sp, fontWeight = FontWeight.Bold)
+        Text(glyph, color = Palette.text, fontSize = 26.sp, fontWeight = FontWeight.Bold)
     }
 }

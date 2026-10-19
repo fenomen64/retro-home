@@ -774,9 +774,18 @@ private fun TabContent(tab: ConsoleTab, state: ConsoleState, actions: ConsoleAct
         return
     }
     val single = tab.rows.size == 1
+    // Ряд игр: под карточками только название (описание и прочее — на странице игры), обложки крупные
+    val gamesRow = single && tab.rows[0].entries.any { it.kind == EntryKind.GAME }
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        val cardSize: Dp = if (single) (maxHeight * 0.48f).coerceIn(96.dp, 168.dp)
-        else (maxHeight / tab.rows.size - 54.dp).coerceIn(64.dp, 120.dp)
+        val cardSize: Dp = when {
+            gamesRow -> {
+                val rowTitle = if (tab.rows[0].title != null) 28.dp else 0.dp
+                // Всё, что остаётся после названия (≈46dp) и отступов ряда, — обложкам
+                (maxHeight - rowTitle - 46.dp - 20.dp - 28.dp).coerceIn(96.dp, 340.dp)
+            }
+            single -> (maxHeight * 0.48f).coerceIn(96.dp, 168.dp)
+            else -> (maxHeight / tab.rows.size - 54.dp).coerceIn(64.dp, 120.dp)
+        }
         Column(
             Modifier.fillMaxSize(),
             verticalArrangement = if (single) Arrangement.Center else Arrangement.SpaceEvenly,
@@ -817,7 +826,19 @@ private fun TabContent(tab: ConsoleTab, state: ConsoleState, actions: ConsoleAct
                         sfx.play(Sfx.MENU)
                     },
                 )
-                if (single) {
+                if (gamesRow) {
+                    // Только название выбранной игры
+                    val e = row.entries.getOrNull(sel)
+                    Text(
+                        e?.label ?: "",
+                        color = Palette.text,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(start = 32.dp, end = 32.dp, top = 10.dp).testTag("rowTitle"),
+                    )
+                } else if (single) {
                     val e = row.entries.getOrNull(sel)
                     Column(Modifier.padding(start = 32.dp, top = 18.dp)) {
                         Text(
@@ -897,7 +918,7 @@ private fun CardRow(
             val faceCover = if (e.kind == EntryKind.GAME) rememberCover(e.cover) else null
             val w = when (e.kind) {
                 EntryKind.GAME -> cardSize * com.retrohome.launcher.ui.coverAspect(faceCover)
-                EntryKind.ACTION -> cardSize * 2.6f
+                EntryKind.ACTION -> (cardSize * 2.6f).coerceAtMost(440.dp)
                 EntryKind.APP -> cardSize
             }
             val bg = if (e.kind == EntryKind.GAME && e.system != null) {
