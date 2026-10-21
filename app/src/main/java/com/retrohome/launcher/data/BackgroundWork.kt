@@ -31,7 +31,7 @@ class RaWatchService : Service() {
         // Самая низкая важность: без звука и всплывания, только значок
         nm?.createNotificationChannel(NotificationChannel(CHANNEL, intent?.getStringExtra(EXTRA_CHANNEL) ?: head, NotificationManager.IMPORTANCE_MIN))
         val n = Notification.Builder(this, CHANNEL)
-            .setSmallIcon(com.retrohome.launcher.R.drawable.ic_launcher_monochrome)
+            .setSmallIcon(com.retrohome.launcher.R.drawable.ic_notification)
             .setContentTitle(head)
             .setContentText(title)
             .setOngoing(true)

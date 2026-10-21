@@ -31,7 +31,7 @@ object Notifier {
         val nm = context.getSystemService(NotificationManager::class.java) ?: return false
         nm.createNotificationChannel(NotificationChannel(channel, channelName, importance))
         val n = Notification.Builder(context, channel)
-            .setSmallIcon(com.retrohome.launcher.R.drawable.ic_launcher_monochrome)
+            .setSmallIcon(com.retrohome.launcher.R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(text)
             .setStyle(Notification.BigTextStyle().bigText(text))

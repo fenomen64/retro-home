@@ -197,6 +197,8 @@ class RaWatchTest {
         val nm = app.getSystemService(NotificationManager::class.java)
         val posted = shadowOf(nm).allNotifications
         assertEquals(1, posted.size)
+        // Свой значок уведомлений во весь квадрат (а не крошечный силуэт иконки приложения)
+        assertEquals(com.retrohome.launcher.R.drawable.ic_notification, posted[0].smallIcon.resId)
         assertEquals("RetroAchievements недоступен", posted[0].extras.getString("android.title"))
         assertTrue(posted[0].extras.getCharSequence("android.text").toString().contains("Skies of Arcadia"))
         // Канал с высокой важностью — всплывает поверх эмулятора
