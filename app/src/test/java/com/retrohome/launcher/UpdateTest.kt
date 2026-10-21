@@ -17,6 +17,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.printToLog
 import androidx.compose.ui.test.performClick
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.retrohome.launcher.data.ModeOverride
@@ -102,9 +103,9 @@ class UpdateTest {
     }
 
     @Test
-    fun checksAboutHourly() {
-        val minutes = UpdateCheck.INTERVAL_MS / 60_000
-        assertTrue("интервал $minutes мин", minutes in 50..60)
+    fun checksEveryCoupleOfMinutes() {
+        val seconds = UpdateCheck.INTERVAL_MS / 1000
+        assertTrue("интервал $seconds с", seconds in 60..180)
     }
 
     @Test
@@ -118,6 +119,9 @@ class UpdateTest {
         val a = RecordingConsoleActions()
         val items = startMenu(RU, ModeOverride.AUTO, a, update = "0.39")
         assertEquals("Обновить до 0.39", items.first().title)
+        // Пункт выделен, остальные — обычные
+        assertTrue(items.first().highlight)
+        assertTrue(items.drop(1).none { it.highlight })
         // Без новой версии пункта нет
         assertTrue(startMenu(RU, ModeOverride.AUTO, a).none { it.title.startsWith("Обновить до") })
     }
@@ -151,6 +155,26 @@ class UpdateTest {
         val refreshAt = startMenu(RU, ModeOverride.AUTO, actions).indexOfFirst { it.title == RU.updateMeta }
         compose.runOnIdle { state.menuIndex = refreshAt; pads.dispatch(com.retrohome.launcher.ui.Pad.CONFIRM) }
         compose.runOnIdle { state.screenClosed(); assertNull(state.overlay) }
+    }
+
+    @Test
+    @Config(qualifiers = "w768dp-h432dp-land-xhdpi")
+    fun updateEntryStandsOutInStartMenu() {
+        val pads = com.retrohome.launcher.ui.PadRegistry()
+        val state = com.retrohome.launcher.ui.console.ConsoleState()
+        compose.setContent {
+            CompositionLocalProvider(LocalStrings provides RU, com.retrohome.launcher.ui.LocalPadRegistry provides pads) {
+                com.retrohome.launcher.ui.console.ConsoleHome(
+                    com.retrohome.launcher.ui.console.buildConsoleTabs(emptyList(), com.retrohome.launcher.data.LauncherData(), RU, com.retrohome.launcher.ui.console.GamesInfo(hasFolder = true)),
+                    state, ModeOverride.AUTO, false, RecordingConsoleActions(), update = "0.45",
+                )
+            }
+        }
+        compose.runOnIdle { pads.dispatch(com.retrohome.launcher.ui.Pad.START); pads.dispatch(com.retrohome.launcher.ui.Pad.DOWN) }
+        compose.waitForIdle()
+        compose.onNodeWithTag("menuHighlight", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("Новое").assertExists()
+        compose.onRoot().captureRoboImage("build/screenshots/63_start_menu_update.png")
     }
 
     private fun show(content: @Composable () -> Unit) = compose.setContent {

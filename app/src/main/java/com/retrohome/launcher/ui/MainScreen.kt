@@ -79,6 +79,8 @@ fun MainScreen(
     val stack = remember { mutableStateListOf<Screen>() }
     // Обновление лаунчера: что известно о новой версии
     val updateState by controller.updater.state.collectAsState()
+    // Нажали на уведомление о новой версии — сразу на экран обновления
+    val openUpdate by controller.openUpdateRequest.collectAsState()
     val updateVersion = remember(updateState) { controller.updater.availableVersion() }
     val settingsNav = remember { SettingsNav() }
     val consoleState = remember { ConsoleState() }
@@ -119,6 +121,13 @@ fun MainScreen(
         if (sc == Screen.SETTINGS && Screen.SETTINGS !in stack) settingsNav.reset()
         stack.remove(sc)
         stack.add(sc)
+    }
+
+    LaunchedEffect(openUpdate) {
+        if (openUpdate) {
+            controller.openUpdateRequest.value = false
+            push(Screen.UPDATE)
+        }
     }
 
     fun pop() {

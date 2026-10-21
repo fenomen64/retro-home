@@ -7,6 +7,9 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -50,10 +53,33 @@ object RaWatch {
 
     enum class Result { UP, DOWN, OFFLINE }
 
-    /** Сетевой запрос (вызывать не из главного потока). */
+    /** О чём сообщить пользователю. */
+    enum class Event { DOWN, OFFLINE, RESTORED }
+
+    /**
+     * Сообщать ли о новом результате проверки. Без спама: о недоступности — один раз (и ещё раз, только
+     * если сменилась причина: пропал интернет ↔ сбой сервера); о доступности — только когда связь вернулась
+     * после сбоя. Сервер работает с самого начала — молчим.
+     */
+    fun transition(prev: Result?, now: Result): Event? = when (now) {
+        Result.UP -> if (prev == Result.DOWN || prev == Result.OFFLINE) Event.RESTORED else null
+        Result.DOWN -> if (prev != Result.DOWN) Event.DOWN else null
+        Result.OFFLINE -> if (prev != Result.OFFLINE) Event.OFFLINE else null
+    }
+
+    /** Сайты, по которым проверяем, есть ли интернет вообще (отвечают мгновенно и без содержимого). */
+    private val internetProbes = listOf(
+        "https://connectivitycheck.gstatic.com/generate_204",
+        "https://www.cloudflare.com/cdn-cgi/trace",
+    )
+
+    /**
+     * Сетевой запрос (вызывать не из главного потока). Сервер не ответил — отличаем «нет интернета»
+     * от «сбой на стороне RetroAchievements» по тому, открываются ли другие сайты.
+     */
     fun probe(context: Context, version: String): Result {
         if (!online(context)) return Result.OFFLINE
-        return try {
+        val up = try {
             val c = (URL(PROBE_URL).openConnection() as HttpURLConnection).apply {
                 connectTimeout = 5_000
                 readTimeout = 6_000
@@ -62,10 +88,21 @@ object RaWatch {
             val code = c.responseCode
             val body = runCatching { (if (code < 400) c.inputStream else c.errorStream)?.bufferedReader()?.use { it.readText().take(4000) } }.getOrNull()
             c.disconnect()
-            if (isUp(code, body)) Result.UP else Result.DOWN
+            isUp(code, body)
         } catch (_: Exception) {
-            Result.DOWN
+            false
         }
+        if (up) return Result.UP
+        return if (internetProbes.any { reachable(it) }) Result.DOWN else Result.OFFLINE
+    }
+
+    private fun reachable(url: String): Boolean = try {
+        val c = (URL(url).openConnection() as HttpURLConnection).apply { connectTimeout = 4_000; readTimeout = 4_000 }
+        val code = c.responseCode
+        c.disconnect()
+        code in 200..399
+    } catch (_: Exception) {
+        false
     }
 
     private fun online(context: Context): Boolean {
@@ -75,28 +112,67 @@ object RaWatch {
     }
 
     /** Можно ли показывать уведомления (на Android 13+ нужно разрешение). */
-    fun canNotify(context: Context): Boolean {
-        if (Build.VERSION.SDK_INT >= 33 &&
-            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) return false
-        return context.getSystemService(NotificationManager::class.java)?.areNotificationsEnabled() == true
+    fun canNotify(context: Context): Boolean = Notifier.canNotify(context)
+
+    /** Уведомление о состоянии сервера. Всегда одно и то же место: новое заменяет прежнее, не копятся. */
+    fun notify(context: Context, channelName: String, title: String, text: String): Boolean =
+        Notifier.post(context, NOTIFICATION_ID, CHANNEL, channelName, NotificationManager.IMPORTANCE_HIGH, title, text)
+}
+
+/**
+ * Слежение за RetroAchievements во время игры: проверка при запуске и дальше примерно раз в 5 минут,
+ * пока игра идёт (до возвращения в лаунчер). Уведомления — только при смене состояния (см. [RaWatch.transition]).
+ */
+class RaMonitor(
+    private val context: Context,
+    private val scope: kotlinx.coroutines.CoroutineScope,
+    private val version: () -> String,
+    /** Сообщить пользователю (уведомление или, без разрешения, надпись внизу экрана). */
+    private val report: (RaWatch.Event, String) -> Unit,
+    private val intervalMs: Long = 5 * 60_000L,
+    private val confirmMs: Long = 15_000L,
+    private val probe: () -> RaWatch.Result = { RaWatch.probe(context, version()) },
+) {
+    private var job: kotlinx.coroutines.Job? = null
+
+    /** Последнее известное состояние сервера в этой игре (null — ещё не проверяли). */
+    var last: RaWatch.Result? = null
+        private set
+
+    val running: Boolean get() = job?.isActive == true
+
+    /** Запущена игра с достижениями — начинаем следить заново. */
+    fun start(title: String) {
+        stop()
+        last = null
+        job = scope.launch {
+            val until = System.currentTimeMillis() + MAX_MS
+            while (isActive && System.currentTimeMillis() < until) {
+                val r = check()
+                DiagLog.add("RetroAchievements («$title»): $r")
+                RaWatch.transition(last, r)?.let { report(it, title) }
+                last = r
+                delay(intervalMs)
+            }
+        }
     }
 
-    /** Уведомление «сервер недоступен». false — показать нельзя (нет разрешения). */
-    fun notify(context: Context, channelName: String, title: String, text: String): Boolean {
-        if (!canNotify(context)) return false
-        val nm = context.getSystemService(NotificationManager::class.java) ?: return false
-        // Важность высокая — всплывает поверх эмулятора, пока игра ещё не началась
-        nm.createNotificationChannel(NotificationChannel(CHANNEL, channelName, NotificationManager.IMPORTANCE_HIGH))
-        val n = Notification.Builder(context, CHANNEL)
-            .setSmallIcon(com.retrohome.launcher.R.drawable.ic_launcher_monochrome)
-            .setContentTitle(title)
-            .setContentText(text)
-            .setStyle(Notification.BigTextStyle().bigText(text))
-            .setAutoCancel(true)
-            .setCategory(Notification.CATEGORY_STATUS)
-            .build()
-        nm.notify(NOTIFICATION_ID, n)
-        return true
+    /** Вернулись в лаунчер (игра закончена) или проверку выключили. */
+    fun stop() {
+        job?.cancel()
+        job = null
+    }
+
+    /** Сбой подтверждаем повторной проверкой через несколько секунд — короткий обрыв не повод тревожить. */
+    private suspend fun check(): RaWatch.Result {
+        val first = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { probe() }
+        if (first == RaWatch.Result.UP) return first
+        delay(confirmMs)
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { probe() }
+    }
+
+    private companion object {
+        /** Страховка: дольше 8 часов подряд не следим. */
+        const val MAX_MS = 8 * 60 * 60_000L
     }
 }

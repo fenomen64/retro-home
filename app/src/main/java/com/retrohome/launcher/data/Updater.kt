@@ -31,14 +31,14 @@ import java.security.MessageDigest
 object UpdateCheck {
     const val REPO = "fenomen64/retro-home"
     /** Последние выпуски одним запросом: из них — новейший и описания всех версий новее установленной. */
-    const val LIST_URL = "https://api.github.com/repos/$REPO/releases?per_page=40"
+    const val LIST_URL = "https://api.github.com/repos/$REPO/releases?per_page=30"
     const val RELEASES_PAGE = "https://github.com/$REPO/releases/latest"
 
     /**
      * Автопроверка — примерно раз в час (не чаще, чем раз в 55 минут). Один запрос к api.github.com —
      * далеко от лимита GitHub (60 запросов в час без входа).
      */
-    const val INTERVAL_MS = 55L * 60 * 1000
+    const val INTERVAL_MS = 110_000L
 
     data class Release(
         val version: String,
@@ -181,7 +181,7 @@ class Updater(private val context: Context, private val scope: CoroutineScope) {
     }
 
     /**
-     * Тихая проверка при возвращении на главный экран: не чаще раза в час. Найдено — вызывается onFound
+     * Тихая фоновая проверка: не чаще раза в пару минут. Найдено — вызывается onFound
      * (один раз на каждую новую версию, чтобы не надоедать).
      */
     fun autoCheck(onFound: (String) -> Unit) {
@@ -197,15 +197,24 @@ class Updater(private val context: Context, private val scope: CoroutineScope) {
         }
     }
 
+    private var lastLogged: String? = null
+
     fun check(manual: Boolean = true, onFound: (String) -> Unit = {}) {
         if (job?.isActive == true) return
+        // Идёт скачивание или установка — фоновая проверка не мешает
+        val busy = _state.value is UpdateState.Downloading || _state.value is UpdateState.Installing || _state.value is UpdateState.NeedPermission
+        if (!manual && busy) return
         job = scope.launch {
             val before = _state.value
-            _state.value = UpdateState.Checking
+            // Фоновая проверка незаметна: «Проверяю…» показываем только при ручной
+            if (manual) _state.value = UpdateState.Checking
             val result = withContext(Dispatchers.IO) { fetchLatest() }
             prefs.edit().putLong("checkedAt", System.currentTimeMillis()).apply()
-            _state.value = result
-            DiagLog.add("обновление: проверка ${if (manual) "вручную" else "при запуске"} → ${describe(result)}")
+            // Фоновая проверка не меняет известную новую версию на ошибку сети
+            if (manual || result !is UpdateState.Failed) _state.value = result
+            // Фоновые проверки идут часто — в журнал только то, что изменилось
+            if (manual || describe(result) != lastLogged) DiagLog.add("обновление: проверка ${if (manual) "вручную" else "в фоне"} → ${describe(result)}")
+            lastLogged = describe(result)
             if (result is UpdateState.Available) {
                 remember(result.release)
                 onFound(result.release.version)
@@ -222,12 +231,22 @@ class Updater(private val context: Context, private val scope: CoroutineScope) {
         else -> s.toString()
     }
 
+    /** Последний ответ GitHub и его метка: повторный запрос «изменилось ли что-то» не тратит лимит GitHub. */
+    private val cacheFile get() = File(context.filesDir, "releases-cache.json")
+
     private fun fetchLatest(): UpdateState = try {
         val c = open(UpdateCheck.LIST_URL)
         c.setRequestProperty("Accept", "application/vnd.github+json")
+        // Условный запрос: если выпусков не прибавилось, GitHub отвечает «304 не изменилось»,
+        // и такие ответы не входят в лимит 60 запросов в час — поэтому проверять можно часто
+        val etag = prefs.getString("etag", null)
+        if (etag != null && cacheFile.exists()) c.setRequestProperty("If-None-Match", etag)
         when (val code = c.responseCode) {
-            200 -> {
-                val body = c.inputStream.bufferedReader().use { it.readText() }
+            200, 304 -> {
+                val body = if (code == 304) cacheFile.readText() else c.inputStream.bufferedReader().use { it.readText() }.also { b ->
+                    runCatching { cacheFile.writeText(b) }
+                    c.getHeaderField("ETag")?.let { prefs.edit().putString("etag", it).apply() }
+                }
                 val r = UpdateCheck.parseList(body, currentVersion)
                 when {
                     r == null -> UpdateState.Failed(UpdateState.Reason.NO_APK)

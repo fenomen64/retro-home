@@ -536,13 +536,15 @@ val RU = Strings(
     musicVolume = "Громкость музыки",
     ext = ExtStrings(
         raWatch = RaWatchStrings(
-            title = "Проверять RetroAchievements перед игрой",
-            desc = "Перед запуском игры с достижениями лаунчер проверяет, работает ли сервер RetroAchievements, и присылает уведомление, если нет — иначе полученные достижения могут не засчитаться",
+            title = "Следить за RetroAchievements в игре",
+            desc = "При запуске игры с достижениями и дальше примерно раз в 5 минут лаунчер проверяет связь с сервером RetroAchievements. Уведомление приходит, только когда связь пропала (с причиной: нет интернета или сбой сервера) и когда она вернулась",
             channel = "Состояние RetroAchievements",
             downTitle = "RetroAchievements недоступен",
-            downText = "Сервер достижений не отвечает — достижения в «%s» сейчас могут не засчитаться. Можно подождать или играть без них.",
-            offlineTitle = "Нет интернета",
-            offlineText = "Достижения в «%s» не засчитаются, пока устройство не подключено к интернету.",
+            downText = "Интернет есть, но сервер достижений не отвечает — сбой на стороне RetroAchievements. Достижения в «%s» сейчас могут не засчитаться.",
+            offlineTitle = "Нет связи с RetroAchievements",
+            offlineText = "Нет интернета — лаунчер не может связаться с сервером достижений. Достижения в «%s» сейчас могут не засчитаться.",
+            restoredTitle = "RetroAchievements снова доступен",
+            restoredText = "Связь с сервером достижений восстановилась — достижения в «%s» снова засчитываются.",
             noPermission = "Разрешите Retro Home показывать уведомления — иначе предупреждение придёт только надписью внизу экрана",
         ),
         upd = UpdateStrings(
@@ -575,6 +577,10 @@ val RU = Strings(
             toast = "Retro Home: доступна версия %s — Настройки → Обновление",
             mb = "МБ",
             versionTitle = "Версия %s",
+            channel = "Обновления Retro Home",
+            notifTitle = "Вышла Retro Home %s",
+            notifText = "Нажмите, чтобы посмотреть, что нового, и обновиться",
+            badge = "Новое",
         ),
         menu = MenuStrings(
             general = "Язык, режим, кнопки A/B, масштаб, главный экран",
@@ -924,13 +930,15 @@ val EN = Strings(
     musicVolume = "Music volume",
     ext = ExtStrings(
         raWatch = RaWatchStrings(
-            title = "Check RetroAchievements before playing",
-            desc = "Before a game with achievements starts, the launcher checks the RetroAchievements server and sends a notification if it's down — otherwise earned achievements may not count",
+            title = "Watch RetroAchievements while playing",
+            desc = "When a game with achievements starts and then about every 5 minutes, the launcher checks the RetroAchievements server. You're notified only when the connection is lost (with the reason: no internet or a server outage) and when it's back",
             channel = "RetroAchievements status",
             downTitle = "RetroAchievements is down",
-            downText = "The achievements server isn't responding — achievements in “%s” may not count right now. You can wait or play without them.",
-            offlineTitle = "No internet",
-            offlineText = "Achievements in “%s” won't count while the device is offline.",
+            downText = "The internet works, but the achievements server isn't responding — an outage on RetroAchievements' side. Achievements in “%s” may not count right now.",
+            offlineTitle = "No connection to RetroAchievements",
+            offlineText = "No internet — the launcher can't reach the achievements server. Achievements in “%s” may not count right now.",
+            restoredTitle = "RetroAchievements is back",
+            restoredText = "The connection to the achievements server is back — achievements in “%s” count again.",
             noPermission = "Allow Retro Home to show notifications — otherwise the warning only appears as a short message at the bottom",
         ),
         upd = UpdateStrings(
@@ -963,6 +971,10 @@ val EN = Strings(
             toast = "Retro Home: version %s is available — Settings → Update",
             mb = "MB",
             versionTitle = "Version %s",
+            channel = "Retro Home updates",
+            notifTitle = "Retro Home %s is out",
+            notifText = "Tap to see what's new and update",
+            badge = "New",
         ),
         menu = MenuStrings(
             general = "Language, mode, A/B buttons, scale, home screen",
@@ -1131,6 +1143,8 @@ data class RaWatchStrings(
     val downText: String,
     val offlineTitle: String,
     val offlineText: String,
+    val restoredTitle: String,
+    val restoredText: String,
     val noPermission: String,
 )
 
@@ -1165,6 +1179,10 @@ data class UpdateStrings(
     val toast: String,
     val mb: String,
     val versionTitle: String,
+    val channel: String,
+    val notifTitle: String,
+    val notifText: String,
+    val badge: String,
 ) {
     fun sizeMb(bytes: Long) = if (bytes <= 0) "" else " · %.1f %s".format(java.util.Locale.ROOT, bytes / 1048576.0, mb)
 }

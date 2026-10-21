@@ -37,6 +37,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
+/** Что открыть при запуске из уведомления. */
+const val EXTRA_OPEN = "com.retrohome.launcher.OPEN"
+const val OPEN_UPDATE = "update"
+
 class LauncherApp : Application() {
     lateinit var controller: LauncherController
         private set
@@ -341,31 +345,38 @@ class LauncherController(
         }
     }
 
-    /**
-     * Игра с достижениями запущена — проверить, работает ли сервер RetroAchievements (если включено в настройках).
-     * Игра не ждёт проверки; если сервер недоступен, приходит уведомление поверх эмулятора.
-     */
+    /** Слежение за RetroAchievements во время игры: при запуске и раз в 5 минут, уведомления — только при смене состояния. */
+    private val raMonitor = com.retrohome.launcher.data.RaMonitor(
+        context, scope,
+        version = { runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "" },
+        report = { event, title -> reportRa(event, title) },
+    )
+
+    private fun reportRa(event: com.retrohome.launcher.data.RaWatch.Event, title: String) {
+        val w = strings.ext.raWatch
+        val (head, text) = when (event) {
+            com.retrohome.launcher.data.RaWatch.Event.DOWN -> w.downTitle to w.downText.format(title)
+            com.retrohome.launcher.data.RaWatch.Event.OFFLINE -> w.offlineTitle to w.offlineText.format(title)
+            com.retrohome.launcher.data.RaWatch.Event.RESTORED -> w.restoredTitle to w.restoredText.format(title)
+        }
+        if (!com.retrohome.launcher.data.RaWatch.notify(context, w.channel, head, text)) toast("$head. $text")
+    }
+
+    /** Игра с достижениями запущена — следим за сервером RetroAchievements (если включено в настройках). */
     private fun checkRaBeforeLaunch(game: com.retrohome.launcher.data.Game, system: GameSystem, title: String) {
+        raMonitor.stop()
         if (!data.settings.raCheck) return
         val matches = achievements.state.value.matches
         if (!com.retrohome.launcher.data.RaWatch.relevant(system, game.id in matches, matches[game.id])) return
-        val w = strings.ext.raWatch
-        val version = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: ""
-        scope.launch(Dispatchers.IO) {
-            val r = com.retrohome.launcher.data.RaWatch.probe(context, version)
-            com.retrohome.launcher.data.DiagLog.add("RetroAchievements перед игрой «$title»: $r")
-            if (r == com.retrohome.launcher.data.RaWatch.Result.UP) return@launch
-            val text = if (r == com.retrohome.launcher.data.RaWatch.Result.OFFLINE) w.offlineText.format(title) else w.downText.format(title)
-            val title2 = if (r == com.retrohome.launcher.data.RaWatch.Result.OFFLINE) w.offlineTitle else w.downTitle
-            withContext(Dispatchers.Main) {
-                if (!com.retrohome.launcher.data.RaWatch.notify(context, w.channel, title2, text)) toast("$title2. $text")
-            }
-        }
+        raMonitor.start(title)
     }
 
     fun raWatchNoPermission(): String = strings.ext.raWatch.noPermission
 
-    fun toggleRaCheck() = store.update { d -> d.copy(settings = d.settings.copy(raCheck = !d.settings.raCheck)) }
+    fun toggleRaCheck() {
+        store.update { d -> d.copy(settings = d.settings.copy(raCheck = !d.settings.raCheck)) }
+        if (!data.settings.raCheck) raMonitor.stop()
+    }
 
     /** Есть ли доступ к статистике использования (точный учёт времени в играх). */
     val usageAccess = MutableStateFlow(UsageTime.hasAccess(context))
@@ -376,6 +387,8 @@ class LauncherController(
         // Ярлыки Lemuroid, закреплённые на этом главном экране
         val installed = installedPackages()
         scope.launch(Dispatchers.IO) { com.retrohome.launcher.data.Lemuroid.syncPinned(context, installed) }
+        // Вернулись из игры — следить за сервером достижений больше не нужно
+        raMonitor.stop()
         // Вернулись из игры — могли открыться новые достижения
         achievements.refreshProgress()
         settleSession()
@@ -442,10 +455,45 @@ class LauncherController(
     /** При возвращении на главный экран: тихая проверка (если включена) и продолжение установки после разрешения. */
     fun onResumeUpdates() {
         updater.onResume()
+        autoCheckUpdates()
+    }
+
+    private fun autoCheckUpdates() {
         if (!store.data.value.settings.updateCheck) return
-        updater.autoCheck { v ->
-            val s = if (store.data.value.settings.lang == com.retrohome.launcher.data.Lang.RU) com.retrohome.launcher.i18n.RU else com.retrohome.launcher.i18n.EN
-            android.widget.Toast.makeText(context, s.ext.upd.toast.format(v), android.widget.Toast.LENGTH_LONG).show()
+        updater.autoCheck { v -> announceUpdate(v) }
+    }
+
+    /** Нажали на уведомление о новой версии — открыть экран «Обновление». */
+    val openUpdateRequest = MutableStateFlow(false)
+
+    /** Новая версия найдена (один раз на версию): уведомление, нажатие открывает экран обновления. */
+    private fun announceUpdate(version: String) {
+        val u = strings.ext.upd
+        val target = if (isDefaultHome()) MainActivity::class.java else AppModeActivity::class.java
+        val open = Intent(context, target).putExtra(EXTRA_OPEN, OPEN_UPDATE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val tap = android.app.PendingIntent.getActivity(
+            context, 7, open, android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val shown = com.retrohome.launcher.data.Notifier.post(
+            context, 4202, "updates", u.channel, android.app.NotificationManager.IMPORTANCE_DEFAULT,
+            u.notifTitle.format(version), u.notifText, tap,
+        )
+        if (!shown) toast(u.toast.format(version))
+    }
+
+    private fun isDefaultHome(): Boolean = runCatching {
+        val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+        context.packageManager.resolveActivity(home, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo?.packageName == context.packageName
+    }.getOrDefault(false)
+
+    init {
+        // Новые версии ищем раз в пару минут, пока лаунчер работает (и во время игры тоже)
+        scope.launch {
+            kotlinx.coroutines.delay(20_000)
+            while (true) {
+                autoCheckUpdates()
+                kotlinx.coroutines.delay(com.retrohome.launcher.data.UpdateCheck.INTERVAL_MS + 10_000)
+            }
         }
     }
 

@@ -13,6 +13,8 @@ import androidx.compose.ui.test.hasScrollAction
 import com.retrohome.launcher.data.GameSystem
 import com.retrohome.launcher.data.ModeOverride
 import com.retrohome.launcher.data.RaWatch
+import com.retrohome.launcher.data.RaWatch.Result as R
+import com.retrohome.launcher.data.RaWatch.Event as E
 import com.retrohome.launcher.data.Settings
 import com.retrohome.launcher.i18n.LocalStrings
 import com.retrohome.launcher.i18n.RU
@@ -55,6 +57,47 @@ class RaWatchTest {
         assertTrue(RaWatch.relevant(GameSystem.GBA, matchKnown = false, raGameId = null))
         assertFalse(RaWatch.relevant(GameSystem.SWITCH, matchKnown = false, raGameId = null))
         assertFalse(RaWatch.relevant(GameSystem.VITA, matchKnown = false, raGameId = null))
+    }
+
+    @Test fun notifiesOnlyWhenStateChanges() {
+        // Каждые 5 минут: работает, работает, сбой, сбой, пропал интернет, нет интернета, вернулось, работает
+        val seq = listOf(R.UP, R.UP, R.DOWN, R.DOWN, R.OFFLINE, R.OFFLINE, R.UP, R.UP)
+        var prev: RaWatch.Result? = null
+        val events = seq.map { r -> RaWatch.transition(prev, r).also { prev = r } }
+        assertEquals(listOf(null, null, E.DOWN, null, E.OFFLINE, null, E.RESTORED, null), events)
+        // Сервер недоступен уже при запуске — сообщаем сразу; работает при запуске — молчим
+        assertEquals(E.DOWN, RaWatch.transition(null, R.DOWN))
+        assertEquals(E.OFFLINE, RaWatch.transition(null, R.OFFLINE))
+        assertEquals(null, RaWatch.transition(null, R.UP))
+    }
+
+    @Test fun monitorChecksPeriodicallyWithoutSpam() {
+        // Ответы «сервера» по порядку. Сбой подтверждается второй проверкой: короткий обрыв (DOWN, затем UP) — не сбой
+        val answers = ArrayDeque(listOf(
+            R.UP,               // при запуске — работает, молчим
+            R.DOWN, R.UP,       // короткий обрыв — молчим
+            R.DOWN, R.DOWN,     // сбой сервера — одно уведомление
+            R.DOWN, R.DOWN,     // всё ещё сбой — молчим
+            R.OFFLINE, R.OFFLINE, // причина сменилась: пропал интернет — уведомление
+            R.UP,               // связь вернулась — уведомление
+            R.UP, R.UP, R.UP,   // дальше работает — молчим
+        ))
+        val events = java.util.Collections.synchronizedList(mutableListOf<RaWatch.Event>())
+        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default)
+        val m = com.retrohome.launcher.data.RaMonitor(
+            RuntimeEnvironment.getApplication(), scope, version = { "test" },
+            report = { e, title -> assertEquals("Skies of Arcadia", title); events += e },
+            intervalMs = 20, confirmMs = 5,
+            probe = { synchronized(answers) { answers.removeFirstOrNull() ?: R.UP } },
+        )
+        m.start("Skies of Arcadia")
+        kotlinx.coroutines.runBlocking {
+            kotlinx.coroutines.withTimeout(10_000) { while (synchronized(answers) { answers.isNotEmpty() }) kotlinx.coroutines.delay(10) }
+            kotlinx.coroutines.delay(100)
+        }
+        m.stop()
+        assertEquals(listOf(RaWatch.Event.DOWN, RaWatch.Event.OFFLINE, RaWatch.Event.RESTORED), events.toList())
+        assertFalse(m.running)
     }
 
     @Test fun offByDefault() {

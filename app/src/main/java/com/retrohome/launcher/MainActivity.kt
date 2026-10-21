@@ -74,7 +74,9 @@ open class MainActivity : ComponentActivity() {
         if (uri != null) controller.setRomsFolder(uri)
     }
     private val askNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (!granted) android.widget.Toast.makeText(this, controller.raWatchNoPermission(), android.widget.Toast.LENGTH_LONG).show()
+        if (!granted && controller.store.data.value.settings.raCheck) {
+            android.widget.Toast.makeText(this, controller.raWatchNoPermission(), android.widget.Toast.LENGTH_LONG).show()
+        }
     }
 
     private val pickMusic = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -334,10 +336,36 @@ open class MainActivity : ComponentActivity() {
                 }
             }
         }
+        handleOpen(intent)
+        askNotificationsOnce()
+    }
+
+    /**
+     * Уведомления о новых версиях (и о RetroAchievements) — на Android 13+ нужно разрешение.
+     * Спрашиваем один раз; отказались — дальше подсказки только надписью внизу экрана.
+     */
+    private fun askNotificationsOnce() {
+        if (android.os.Build.VERSION.SDK_INT < 33) return
+        if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED) return
+        val prefs = getSharedPreferences("ui", MODE_PRIVATE)
+        if (prefs.getBoolean("notifAsked", false)) return
+        val st = controller.store.data.value.settings
+        if (!st.updateCheck && !st.raCheck) return
+        prefs.edit().putBoolean("notifAsked", true).apply()
+        runCatching { askNotifications.launch(android.Manifest.permission.POST_NOTIFICATIONS) }
+    }
+
+    /** Открыт из уведомления «вышла новая версия» — показать экран обновления. */
+    private fun handleOpen(intent: Intent?) {
+        if (intent?.getStringExtra(EXTRA_OPEN) == OPEN_UPDATE) {
+            intent.removeExtra(EXTRA_OPEN)
+            controller.openUpdateRequest.value = true
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        handleOpen(intent)
         if (intent.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_HOME)) {
             homeEvents.tryEmit(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
         }

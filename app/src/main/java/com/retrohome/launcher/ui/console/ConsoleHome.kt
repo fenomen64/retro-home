@@ -54,6 +54,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.ui.platform.LocalDensity
 import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.ui.platform.testTag
@@ -208,6 +209,8 @@ data class MenuEntry(
     val step: ((Int) -> Unit)? = null,
     /** Открывает экран лаунчера; закрыли его — снова это меню. */
     val returnsHere: Boolean = false,
+    /** Выделенный пункт (вышла новая версия): цветной фон и значок «Новое», чтобы не пропустить. */
+    val highlight: Boolean = false,
     val action: () -> Unit,
 )
 
@@ -222,7 +225,7 @@ fun startMenu(
     /** Вышла новая версия лаунчера — первым пунктом предлагаем обновиться. */
     update: String? = null,
 ): List<MenuEntry> = listOfNotNull(
-    update?.let { v -> MenuEntry(s.ext.upd.menuItem.format(v), returnsHere = true) { a.openUpdate() } },
+    update?.let { v -> MenuEntry(s.ext.upd.menuItem.format(v), returnsHere = true, highlight = true) { a.openUpdate() } },
     MenuEntry(s.search, returnsHere = true) { a.openSearch() },
     choiceEntry(s.sortGames, s.sortName(gameSort)) { a.cycleSortGames(it) },
     choiceEntry(s.sounds, s.packName(audio.sfxPack)) { a.cycleSfx(it) },
@@ -1085,21 +1088,55 @@ fun MenuPanel(
         )
         val listState = rememberLazyListState()
         LaunchedEffect(selected) { listState.animateScrollToItem((selected - 2).coerceAtLeast(0)) }
+        // Выделенный пункт (новая версия) мягко «дышит» цветом, чтобы его было видно сразу
+        val glow by androidx.compose.animation.core.rememberInfiniteTransition(label = "menuGlow").animateFloat(
+            initialValue = 0.16f, targetValue = 0.32f,
+            animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+                androidx.compose.animation.core.tween<Float>(900), androidx.compose.animation.core.RepeatMode.Reverse,
+            ),
+            label = "menuGlowAlpha",
+        )
         LazyColumn(state = listState, modifier = Modifier.weight(1f, fill = false)) {
             itemsIndexed(items) { i, m ->
                 val sel = i == selected
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 10.dp, vertical = 2.dp)
+                        .padding(horizontal = 10.dp, vertical = if (m.highlight) 4.dp else 2.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(if (sel) Palette.surfaceHi else Color.Transparent)
-                        .then(if (sel) Modifier.border(2.dp, Palette.accent, RoundedCornerShape(12.dp)) else Modifier)
+                        .background(
+                            when {
+                                m.highlight -> Palette.accent.copy(alpha = if (sel) 0.38f else glow)
+                                sel -> Palette.surfaceHi
+                                else -> Color.Transparent
+                            }
+                        )
+                        .then(
+                            when {
+                                sel -> Modifier.border(2.dp, Palette.accent, RoundedCornerShape(12.dp))
+                                m.highlight -> Modifier.border(1.dp, Palette.accent.copy(alpha = 0.7f), RoundedCornerShape(12.dp))
+                                else -> Modifier
+                            }
+                        )
                         .clickable { onClick(i) }
-                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                        .padding(horizontal = 14.dp, vertical = if (m.highlight) 10.dp else 8.dp)
+                        .then(if (m.highlight) Modifier.testTag("menuHighlight") else Modifier),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(m.title, color = Palette.text, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                    if (m.highlight) {
+                        Text("⬆", color = Palette.accent, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(end = 10.dp))
+                    }
+                    Text(
+                        m.title, color = Palette.text, fontSize = if (m.highlight) 16.sp else 15.sp,
+                        fontWeight = if (m.highlight) FontWeight.Bold else FontWeight.Normal,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (m.highlight) {
+                        Text(
+                            s.ext.upd.badge, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.clip(RoundedCornerShape(50)).background(Palette.accent).padding(horizontal = 8.dp, vertical = 2.dp),
+                        )
+                    }
                     if (m.value != null && m.step != null) {
                         // Стрелки нажимаются пальцем: ‹ — назад, › — вперёд
                         Text(
