@@ -87,7 +87,7 @@ class RaWatchTest {
         val m = com.retrohome.launcher.data.RaMonitor(
             RuntimeEnvironment.getApplication(), scope, version = { "test" },
             report = { e, title -> assertEquals("Skies of Arcadia", title); events += e },
-            intervalMs = 20, confirmMs = 5,
+            intervalMs = 20, firstConfirmMs = 5, confirmMs = 5,
             probe = { synchronized(answers) { answers.removeFirstOrNull() ?: R.UP } },
         )
         m.start("Skies of Arcadia")
@@ -98,6 +98,59 @@ class RaWatchTest {
         m.stop()
         assertEquals(listOf(RaWatch.Event.DOWN, RaWatch.Event.OFFLINE, RaWatch.Event.RESTORED), events.toList())
         assertFalse(m.running)
+    }
+
+    @Test fun briefLauncherFlashDoesNotStopWatching() {
+        val running = java.util.Collections.synchronizedList(mutableListOf<Boolean>())
+        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default)
+        val m = com.retrohome.launcher.data.RaMonitor(
+            RuntimeEnvironment.getApplication(), scope, version = { "test" }, report = { _, _ -> },
+            onRunning = { on, _ -> running += on },
+            intervalMs = 60_000, graceMs = 200, probe = { R.UP },
+        )
+        m.start("Skies of Arcadia")
+        // Эмулятор запускается, лаунчер на миг появляется и снова уходит — слежение продолжается
+        m.launcherResumed()
+        Thread.sleep(50)
+        m.launcherPaused()
+        Thread.sleep(400)
+        assertTrue(m.running)
+        // Вернулись в лаунчер и остались — игра закончена
+        m.launcherResumed()
+        Thread.sleep(600)
+        assertFalse(m.running)
+        // Служба (в режиме приложения) включилась при запуске и выключилась один раз в конце
+        assertEquals(listOf(true, false), running.toList())
+    }
+
+    @Test fun firstWarningComesQuickly() {
+        // Сервер лежит уже при запуске: предупреждение после короткой перепроверки, а не через 15 секунд
+        val events = java.util.Collections.synchronizedList(mutableListOf<RaWatch.Event>())
+        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default)
+        val m = com.retrohome.launcher.data.RaMonitor(
+            RuntimeEnvironment.getApplication(), scope, version = { "test" }, report = { e, _ -> events += e },
+            intervalMs = 60_000, firstConfirmMs = 50, confirmMs = 60_000, probe = { R.DOWN },
+        )
+        m.start("Skies of Arcadia")
+        Thread.sleep(800)
+        m.stop()
+        assertEquals(listOf(RaWatch.Event.DOWN), events.toList())
+    }
+
+    @Test fun updateScheduleFollowsSetting() {
+        val app = RuntimeEnvironment.getApplication()
+        val js = app.getSystemService(android.app.job.JobScheduler::class.java)
+        com.retrohome.launcher.data.UpdateJobService.schedule(app, true)
+        val job = js.getPendingJob(com.retrohome.launcher.data.UpdateJobService.JOB_ID)!!
+        assertEquals(15 * 60_000L, job.intervalMillis)
+        assertTrue(job.isPersisted)
+        com.retrohome.launcher.data.UpdateJobService.schedule(app, false)
+        assertEquals(null, js.getPendingJob(com.retrohome.launcher.data.UpdateJobService.JOB_ID))
+    }
+
+    @Test fun updateTextMatchesRealInterval() {
+        assertFalse(RU.ext.upd.autoDesc.contains("час"))
+        assertTrue(RU.ext.upd.autoDesc.contains("пару минут"))
     }
 
     @Test fun offByDefault() {

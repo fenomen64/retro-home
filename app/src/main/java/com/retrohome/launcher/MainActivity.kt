@@ -220,6 +220,7 @@ open class MainActivity : ComponentActivity() {
     private var shapeVersion by mutableStateOf(0)
 
     override fun onPause() {
+        controller.onLauncherPaused()
         lastOrientation = resources.configuration.orientation
         music.setResumed(false)
         super.onPause()

@@ -129,11 +129,19 @@ class RaMonitor(
     private val version: () -> String,
     /** Сообщить пользователю (уведомление или, без разрешения, надпись внизу экрана). */
     private val report: (RaWatch.Event, String) -> Unit,
+    /** Слежение началось (true) или закончилось (false) — в режиме приложения держим службу. */
+    private val onRunning: (Boolean, String) -> Unit = { _, _ -> },
     private val intervalMs: Long = 5 * 60_000L,
+    /** Повторная проверка перед тем, как сообщить о сбое: при запуске игры — быстро, во время игры — с запасом. */
+    private val firstConfirmMs: Long = 3_000L,
     private val confirmMs: Long = 15_000L,
+    /** Лаунчер должен пробыть на экране столько, чтобы считать игру законченной (мелькание при запуске эмулятора не в счёт). */
+    private val graceMs: Long = 10_000L,
     private val probe: () -> RaWatch.Result = { RaWatch.probe(context, version()) },
 ) {
     private var job: kotlinx.coroutines.Job? = null
+    private var pendingStop: kotlinx.coroutines.Job? = null
+    private var title: String = ""
 
     /** Последнее известное состояние сервера в этой игре (null — ещё не проверяли). */
     var last: RaWatch.Result? = null
@@ -143,31 +151,69 @@ class RaMonitor(
 
     /** Запущена игра с достижениями — начинаем следить заново. */
     fun start(title: String) {
-        stop()
+        cancelJobs()
+        this.title = title
         last = null
+        DiagLog.add("RetroAchievements: слежу за «$title» (раз в ${intervalMs / 60_000} мин)")
+        onRunning(true, title)
         job = scope.launch {
             val until = System.currentTimeMillis() + MAX_MS
-            while (isActive && System.currentTimeMillis() < until) {
-                val r = check()
-                DiagLog.add("RetroAchievements («$title»): $r")
-                RaWatch.transition(last, r)?.let { report(it, title) }
-                last = r
-                delay(intervalMs)
+            var first = true
+            try {
+                while (isActive && System.currentTimeMillis() < until) {
+                    val r = check(if (first) firstConfirmMs else confirmMs)
+                    first = false
+                    DiagLog.add("RetroAchievements («$title»): $r")
+                    RaWatch.transition(last, r)?.let { report(it, title) }
+                    last = r
+                    delay(intervalMs)
+                }
+            } finally {
+                if (job == coroutineContext[kotlinx.coroutines.Job]) {
+                    job = null
+                    onRunning(false, title)
+                }
             }
         }
     }
 
-    /** Вернулись в лаунчер (игра закончена) или проверку выключили. */
-    fun stop() {
-        job?.cancel()
-        job = null
+    /** Проверку выключили — прекращаем сразу. */
+    fun stop(reason: String = "выключено") {
+        if (!running) { pendingStop?.cancel(); return }
+        DiagLog.add("RetroAchievements: слежение за «$title» остановлено — $reason")
+        cancelJobs()
+        onRunning(false, title)
     }
 
-    /** Сбой подтверждаем повторной проверкой через несколько секунд — короткий обрыв не повод тревожить. */
-    private suspend fun check(): RaWatch.Result {
+    /** Лаунчер снова на экране. Если он там задержится — игра закончена, перестаём следить. */
+    fun launcherResumed() {
+        if (!running) return
+        pendingStop?.cancel()
+        pendingStop = scope.launch {
+            delay(graceMs)
+            stop("вернулись в лаунчер")
+        }
+    }
+
+    /** Лаунчер ушёл с экрана (снова игра) — продолжаем следить. */
+    fun launcherPaused() {
+        pendingStop?.cancel()
+        pendingStop = null
+    }
+
+    private fun cancelJobs() {
+        pendingStop?.cancel()
+        pendingStop = null
+        val j = job
+        job = null
+        j?.cancel()
+    }
+
+    /** Сбой подтверждаем повторной проверкой — короткий обрыв не повод тревожить. */
+    private suspend fun check(confirm: Long): RaWatch.Result {
         val first = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { probe() }
         if (first == RaWatch.Result.UP) return first
-        delay(confirmMs)
+        delay(confirm)
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { probe() }
     }
 

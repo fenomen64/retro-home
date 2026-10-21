@@ -184,12 +184,13 @@ class Updater(private val context: Context, private val scope: CoroutineScope) {
      * Тихая фоновая проверка: не чаще раза в пару минут. Найдено — вызывается onFound
      * (один раз на каждую новую версию, чтобы не надоедать).
      */
-    fun autoCheck(onFound: (String) -> Unit) {
+    /** true — проверка запущена (onDone вызовется по её окончании); false — сейчас не нужна. */
+    fun autoCheck(onDone: () -> Unit = {}, onFound: (String) -> Unit): Boolean {
         val last = prefs.getLong("checkedAt", 0L)
         val now = System.currentTimeMillis()
         // Недавно проверяли — сеть не трогаем
-        if (now - last in 0 until UpdateCheck.INTERVAL_MS) return
-        check(manual = false) { version ->
+        if (now - last in 0 until UpdateCheck.INTERVAL_MS) return false
+        return check(manual = false, onDone = onDone) { version ->
             if (prefs.getString("announced", null) != version) {
                 prefs.edit().putString("announced", version).apply()
                 onFound(version)
@@ -199,12 +200,13 @@ class Updater(private val context: Context, private val scope: CoroutineScope) {
 
     private var lastLogged: String? = null
 
-    fun check(manual: Boolean = true, onFound: (String) -> Unit = {}) {
-        if (job?.isActive == true) return
+    fun check(manual: Boolean = true, onDone: () -> Unit = {}, onFound: (String) -> Unit = {}): Boolean {
+        if (job?.isActive == true) return false
         // Идёт скачивание или установка — фоновая проверка не мешает
         val busy = _state.value is UpdateState.Downloading || _state.value is UpdateState.Installing || _state.value is UpdateState.NeedPermission
-        if (!manual && busy) return
+        if (!manual && busy) return false
         job = scope.launch {
+          try {
             val before = _state.value
             // Фоновая проверка незаметна: «Проверяю…» показываем только при ручной
             if (manual) _state.value = UpdateState.Checking
@@ -221,7 +223,11 @@ class Updater(private val context: Context, private val scope: CoroutineScope) {
             }
             // Тихая проверка без сети — не пугаем ошибкой, просто ничего не показываем
             if (!manual && result is UpdateState.Failed) _state.value = before.takeIf { it !is UpdateState.Checking } ?: UpdateState.Idle
+          } finally {
+            onDone()
+          }
         }
+        return true
     }
 
     private fun describe(s: UpdateState) = when (s) {

@@ -545,6 +545,9 @@ val RU = Strings(
             offlineText = "Нет интернета — лаунчер не может связаться с сервером достижений. Достижения в «%s» сейчас могут не засчитаться.",
             restoredTitle = "RetroAchievements снова доступен",
             restoredText = "Связь с сервером достижений восстановилась — достижения в «%s» снова засчитываются.",
+            serviceChannel = "Слежение во время игры",
+            serviceTitle = "Retro Home следит за RetroAchievements",
+            serviceText = "Игра: %s. Сообщу, если сервер достижений станет недоступен",
             noPermission = "Разрешите Retro Home показывать уведомления — иначе предупреждение придёт только надписью внизу экрана",
         ),
         upd = UpdateStrings(
@@ -563,7 +566,7 @@ val RU = Strings(
             needPermission = "Разрешите установку обновлений",
             needPermissionDesc = "Android спрашивает один раз: включите «Разрешить установку» для Retro Home и вернитесь — установка продолжится",
             auto = "Проверять автоматически",
-            autoDesc = "Примерно раз в час заглядывать на GitHub и сообщать о новой версии",
+            autoDesc = "Раз в пару минут заглядывать на GitHub и присылать уведомление о новой версии (когда лаунчер закрыт — раз в 15 минут)",
             whatsNew = "Что нового",
             openPage = "Открыть страницу выпуска",
             openPageDesc = "Скачать APK вручную в браузере",
@@ -939,6 +942,9 @@ val EN = Strings(
             offlineText = "No internet — the launcher can't reach the achievements server. Achievements in “%s” may not count right now.",
             restoredTitle = "RetroAchievements is back",
             restoredText = "The connection to the achievements server is back — achievements in “%s” count again.",
+            serviceChannel = "Watching while playing",
+            serviceTitle = "Retro Home is watching RetroAchievements",
+            serviceText = "Game: %s. You'll be told if the achievements server goes down",
             noPermission = "Allow Retro Home to show notifications — otherwise the warning only appears as a short message at the bottom",
         ),
         upd = UpdateStrings(
@@ -957,7 +963,7 @@ val EN = Strings(
             needPermission = "Allow installing updates",
             needPermissionDesc = "Android asks once: turn on “Allow from this source” for Retro Home and come back — the install continues",
             auto = "Check automatically",
-            autoDesc = "Look at GitHub about once an hour and tell about a new version",
+            autoDesc = "Look at GitHub every couple of minutes and send a notification about a new version (every 15 minutes while the launcher is closed)",
             whatsNew = "What's new",
             openPage = "Open the release page",
             openPageDesc = "Download the APK manually in a browser",
@@ -1146,6 +1152,9 @@ data class RaWatchStrings(
     val restoredTitle: String,
     val restoredText: String,
     val noPermission: String,
+    val serviceChannel: String,
+    val serviceTitle: String,
+    val serviceText: String,
 )
 
 /** Обновление лаунчера. */

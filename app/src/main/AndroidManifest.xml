@@ -62,6 +62,11 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Предупреждение «RetroAchievements недоступен» перед игрой (включается в настройках) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Режим приложения: служба на время игры, чтобы Android не замораживал проверки RetroAchievements -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- Расписание проверки обновлений переживает перезагрузку -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:name=".LauncherApp"
@@ -108,6 +113,22 @@
 
         <!-- Результат установки обновления (окно подтверждения системы) -->
         <receiver android:name=".data.UpdateReceiver" android:exported="false" />
+
+        <!-- Слежение за RetroAchievements во время игры (только в режиме приложения) -->
+        <service
+            android:name=".data.RaWatchService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Checks RetroAchievements server availability while the user plays a game, to warn when earned achievements cannot be submitted" />
+        </service>
+
+        <!-- Проверка обновлений по расписанию (раз в 15 минут), даже когда приложение закрыто -->
+        <service
+            android:name=".data.UpdateJobService"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
 
         <!-- Ярлыки игр из Lemuroid («Создать ярлык»): так лаунчер узнаёт номер игры в его библиотеке -->
         <activity

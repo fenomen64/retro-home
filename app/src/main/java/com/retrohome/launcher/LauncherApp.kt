@@ -350,7 +350,17 @@ class LauncherController(
         context, scope,
         version = { runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "" },
         report = { event, title -> reportRa(event, title) },
+        // Открыт как приложение — держим службу на время игры, иначе Android заморозит проверки
+        onRunning = { on, title ->
+            if (on && !isDefaultHome()) {
+                val w = strings.ext.raWatch
+                com.retrohome.launcher.data.RaWatchService.start(context, w.serviceTitle, w.serviceText.format(title), w.serviceChannel)
+            } else if (!on) com.retrohome.launcher.data.RaWatchService.stop(context)
+        },
     )
+
+    /** Лаунчер ушёл с экрана (запустилась игра). */
+    fun onLauncherPaused() = raMonitor.launcherPaused()
 
     private fun reportRa(event: com.retrohome.launcher.data.RaWatch.Event, title: String) {
         val w = strings.ext.raWatch
@@ -364,7 +374,7 @@ class LauncherController(
 
     /** Игра с достижениями запущена — следим за сервером RetroAchievements (если включено в настройках). */
     private fun checkRaBeforeLaunch(game: com.retrohome.launcher.data.Game, system: GameSystem, title: String) {
-        raMonitor.stop()
+        raMonitor.stop("запущена другая игра")
         if (!data.settings.raCheck) return
         val matches = achievements.state.value.matches
         if (!com.retrohome.launcher.data.RaWatch.relevant(system, game.id in matches, matches[game.id])) return
@@ -375,7 +385,7 @@ class LauncherController(
 
     fun toggleRaCheck() {
         store.update { d -> d.copy(settings = d.settings.copy(raCheck = !d.settings.raCheck)) }
-        if (!data.settings.raCheck) raMonitor.stop()
+        if (!data.settings.raCheck) raMonitor.stop("проверку выключили")
     }
 
     /** Есть ли доступ к статистике использования (точный учёт времени в играх). */
@@ -387,8 +397,8 @@ class LauncherController(
         // Ярлыки Lemuroid, закреплённые на этом главном экране
         val installed = installedPackages()
         scope.launch(Dispatchers.IO) { com.retrohome.launcher.data.Lemuroid.syncPinned(context, installed) }
-        // Вернулись из игры — следить за сервером достижений больше не нужно
-        raMonitor.stop()
+        // Вернулись из игры — следить за сервером достижений больше не нужно (если лаунчер не просто мелькнул)
+        raMonitor.launcherResumed()
         // Вернулись из игры — могли открыться новые достижения
         achievements.refreshProgress()
         settleSession()
@@ -463,6 +473,12 @@ class LauncherController(
         updater.autoCheck { v -> announceUpdate(v) }
     }
 
+    /** Проверка по расписанию Android (UpdateJobService). true — идёт, done вызовется по окончании. */
+    fun backgroundUpdateCheck(done: () -> Unit): Boolean {
+        if (!store.data.value.settings.updateCheck) return false
+        return updater.autoCheck(onDone = done) { v -> announceUpdate(v) }
+    }
+
     /** Нажали на уведомление о новой версии — открыть экран «Обновление». */
     val openUpdateRequest = MutableStateFlow(false)
 
@@ -487,7 +503,9 @@ class LauncherController(
     }.getOrDefault(false)
 
     init {
-        // Новые версии ищем раз в пару минут, пока лаунчер работает (и во время игры тоже)
+        // Расписание Android: раз в 15 минут, даже если лаунчер закрыт или открыт как приложение
+        com.retrohome.launcher.data.UpdateJobService.schedule(context, store.data.value.settings.updateCheck)
+        // Пока лаунчер работает — сами раз в пару минут (и во время игры тоже)
         scope.launch {
             kotlinx.coroutines.delay(20_000)
             while (true) {
@@ -497,7 +515,10 @@ class LauncherController(
         }
     }
 
-    fun toggleUpdateCheck() = store.update { d -> d.copy(settings = d.settings.copy(updateCheck = !d.settings.updateCheck)) }
+    fun toggleUpdateCheck() {
+        store.update { d -> d.copy(settings = d.settings.copy(updateCheck = !d.settings.updateCheck)) }
+        com.retrohome.launcher.data.UpdateJobService.schedule(context, store.data.value.settings.updateCheck)
+    }
 
     fun cycleCarouselKeys(dir: Int = 1) = store.update { d ->
         d.copy(settings = d.settings.copy(carouselKeys = listOf("dpad", "triggers", "both").cycle(d.settings.carouselKeys, dir)))
