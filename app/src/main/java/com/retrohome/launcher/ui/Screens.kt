@@ -171,6 +171,7 @@ interface SettingsActions {
     fun openNetworkCheck() {}
     fun openDiagnostics() {}
     fun openUpdate() {}
+    fun toggleRaCheck() {}
 }
 
 /** Заголовок раздела настроек. */
@@ -413,6 +414,9 @@ private fun androidx.compose.foundation.lazy.LazyListScope.settingsSection(
                 FocusRow(onClick = a::editRaAccount, id = "ra") {
                     TitleAndDesc(s.ra.raAccount, s.ra.raAccountDesc, settings.raUser?.takeIf { settings.raKey != null } ?: s.notSet)
                 }
+            }
+            item {
+                ChoiceRow(s.ext.raWatch.title, if (settings.raCheck) s.on else s.off, desc = s.ext.raWatch.desc, id = "raCheck") { a.toggleRaCheck() }
             }
         }
         SettingsSection.PHONE -> {

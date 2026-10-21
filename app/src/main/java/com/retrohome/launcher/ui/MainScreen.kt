@@ -67,6 +67,8 @@ fun MainScreen(
     version: String,
     onPickRoms: () -> Unit = {},
     onPickMusic: () -> Unit = {},
+    /** Попросить разрешение на уведомления (включили проверку RetroAchievements). */
+    onRequestNotifications: () -> Unit = {},
     /** Сейчас на экране фон темы (а не обои) — для цвета значков строки состояния. */
     onThemedSurface: (Boolean) -> Unit = {},
     /** Добавить выбранный виджет на экран page (привязка и настройка — в Activity). */
@@ -246,6 +248,11 @@ fun MainScreen(
             override fun cycleUiScale(dir: Int) = controller.cycleUiScale(dir)
             override fun editContact() = push(Screen.CONTACT)
             override fun editRaAccount() = push(Screen.RA_ACCOUNT)
+            override fun toggleRaCheck() {
+                // Включаем — сразу спрашиваем разрешение на уведомления
+                if (!data.settings.raCheck) onRequestNotifications()
+                controller.toggleRaCheck()
+            }
             override fun openNetworkCheck() = push(Screen.NETWORK_CHECK)
             override fun openDiagnostics() = push(Screen.DIAGNOSTICS)
             override fun openUpdate() = push(Screen.UPDATE)

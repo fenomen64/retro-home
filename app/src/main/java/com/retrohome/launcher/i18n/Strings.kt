@@ -535,6 +535,16 @@ val RU = Strings(
     pickMusicDesc = "Любой аудиофайл с устройства, будет играть по кругу",
     musicVolume = "Громкость музыки",
     ext = ExtStrings(
+        raWatch = RaWatchStrings(
+            title = "Проверять RetroAchievements перед игрой",
+            desc = "Перед запуском игры с достижениями лаунчер проверяет, работает ли сервер RetroAchievements, и присылает уведомление, если нет — иначе полученные достижения могут не засчитаться",
+            channel = "Состояние RetroAchievements",
+            downTitle = "RetroAchievements недоступен",
+            downText = "Сервер достижений не отвечает — достижения в «%s» сейчас могут не засчитаться. Можно подождать или играть без них.",
+            offlineTitle = "Нет интернета",
+            offlineText = "Достижения в «%s» не засчитаются, пока устройство не подключено к интернету.",
+            noPermission = "Разрешите Retro Home показывать уведомления — иначе предупреждение придёт только надписью внизу экрана",
+        ),
         upd = UpdateStrings(
             title = "Обновление",
             current = "Установлена версия %s",
@@ -913,6 +923,16 @@ val EN = Strings(
     pickMusicDesc = "Any audio file from the device, played on a loop",
     musicVolume = "Music volume",
     ext = ExtStrings(
+        raWatch = RaWatchStrings(
+            title = "Check RetroAchievements before playing",
+            desc = "Before a game with achievements starts, the launcher checks the RetroAchievements server and sends a notification if it's down — otherwise earned achievements may not count",
+            channel = "RetroAchievements status",
+            downTitle = "RetroAchievements is down",
+            downText = "The achievements server isn't responding — achievements in “%s” may not count right now. You can wait or play without them.",
+            offlineTitle = "No internet",
+            offlineText = "Achievements in “%s” won't count while the device is offline.",
+            noPermission = "Allow Retro Home to show notifications — otherwise the warning only appears as a short message at the bottom",
+        ),
         upd = UpdateStrings(
             title = "Update",
             current = "Installed version %s",
@@ -1099,6 +1119,19 @@ data class ExtStrings(
     val scale: ScaleStrings,
     val menu: MenuStrings,
     val upd: UpdateStrings,
+    val raWatch: RaWatchStrings,
+)
+
+/** Проверка RetroAchievements перед игрой. */
+data class RaWatchStrings(
+    val title: String,
+    val desc: String,
+    val channel: String,
+    val downTitle: String,
+    val downText: String,
+    val offlineTitle: String,
+    val offlineText: String,
+    val noPermission: String,
 )
 
 /** Обновление лаунчера. */

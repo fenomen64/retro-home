@@ -39,6 +39,8 @@ data class Settings(
     val carouselKeys: String = "dpad",
     /** Проверять обновления на GitHub (примерно раз в час, при возвращении на главный экран). */
     val updateCheck: Boolean = true,
+    /** Перед игрой с достижениями проверять сервер RetroAchievements и предупреждать уведомлением, если он недоступен. */
+    val raCheck: Boolean = false,
     /** A на игре открывает её страницу (false — сразу запускает). */
     val gamePage: Boolean = true,
     /** Тема оформления: night, oled, graphite, light. */

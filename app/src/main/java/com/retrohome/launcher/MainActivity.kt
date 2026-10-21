@@ -73,6 +73,10 @@ open class MainActivity : ComponentActivity() {
     private val pickTree = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) controller.setRomsFolder(uri)
     }
+    private val askNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (!granted) android.widget.Toast.makeText(this, controller.raWatchNoPermission(), android.widget.Toast.LENGTH_LONG).show()
+    }
+
     private val pickMusic = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) controller.setCustomMusic(uri)
     }
@@ -318,6 +322,11 @@ open class MainActivity : ComponentActivity() {
                         version = packageManager.getPackageInfo(packageName, 0).versionName ?: "",
                         onPickRoms = { runCatching { pickTree.launch(null) } },
                         onPickMusic = { runCatching { pickMusic.launch(arrayOf("audio/*")) } },
+                        onRequestNotifications = {
+                            if (android.os.Build.VERSION.SDK_INT >= 33 &&
+                                checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
+                            ) runCatching { askNotifications.launch(android.Manifest.permission.POST_NOTIFICATIONS) }
+                        },
                         onThemedSurface = { themedSurface = it },
                         onAddWidget = ::addWidget,
                     )

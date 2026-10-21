@@ -34,6 +34,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 class LauncherApp : Application() {
@@ -317,6 +318,7 @@ class LauncherController(
                 // Доступ ко всей папке выдать не удалось — запускаем только с самим файлом игры
                 context.startActivity(recipe.build(ctx.copy(tree = null)))
             }
+            checkRaBeforeLaunch(base, game.system, titles.first())
             if (recipe.id.substringBefore("@") == "lemuroid" && com.retrohome.launcher.data.Lemuroid.idFor(titles) == null) {
                 // Lemuroid открылся на своём списке игр — подсказать, как запускать сразу
                 val home = com.retrohome.launcher.data.Lemuroid.canReceiveShortcuts(context)
@@ -338,6 +340,32 @@ class LauncherController(
             toast(strings.launchFailed.format(recipe.name))
         }
     }
+
+    /**
+     * Игра с достижениями запущена — проверить, работает ли сервер RetroAchievements (если включено в настройках).
+     * Игра не ждёт проверки; если сервер недоступен, приходит уведомление поверх эмулятора.
+     */
+    private fun checkRaBeforeLaunch(game: com.retrohome.launcher.data.Game, system: GameSystem, title: String) {
+        if (!data.settings.raCheck) return
+        val matches = achievements.state.value.matches
+        if (!com.retrohome.launcher.data.RaWatch.relevant(system, game.id in matches, matches[game.id])) return
+        val w = strings.ext.raWatch
+        val version = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: ""
+        scope.launch(Dispatchers.IO) {
+            val r = com.retrohome.launcher.data.RaWatch.probe(context, version)
+            com.retrohome.launcher.data.DiagLog.add("RetroAchievements перед игрой «$title»: $r")
+            if (r == com.retrohome.launcher.data.RaWatch.Result.UP) return@launch
+            val text = if (r == com.retrohome.launcher.data.RaWatch.Result.OFFLINE) w.offlineText.format(title) else w.downText.format(title)
+            val title2 = if (r == com.retrohome.launcher.data.RaWatch.Result.OFFLINE) w.offlineTitle else w.downTitle
+            withContext(Dispatchers.Main) {
+                if (!com.retrohome.launcher.data.RaWatch.notify(context, w.channel, title2, text)) toast("$title2. $text")
+            }
+        }
+    }
+
+    fun raWatchNoPermission(): String = strings.ext.raWatch.noPermission
+
+    fun toggleRaCheck() = store.update { d -> d.copy(settings = d.settings.copy(raCheck = !d.settings.raCheck)) }
 
     /** Есть ли доступ к статистике использования (точный учёт времени в играх). */
     val usageAccess = MutableStateFlow(UsageTime.hasAccess(context))
