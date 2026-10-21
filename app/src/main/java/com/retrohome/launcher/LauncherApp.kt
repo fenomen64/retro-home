@@ -345,13 +345,16 @@ class LauncherController(
         }
     }
 
-    /** Слежение за RetroAchievements во время игры: при запуске и раз в 5 минут, уведомления — только при смене состояния. */
-    private val raMonitor = com.retrohome.launcher.data.RaMonitor(
+    /**
+     * Слежение за сервером RetroAchievements (если включено): раз в 5 минут, пока лаунчер работает,
+     * и раз в 15 минут по расписанию Android; при запуске игры с достижениями — сразу.
+     */
+    private val raWatcher = com.retrohome.launcher.data.RaWatcher(
         context, scope,
         version = { runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "" },
         report = { event, title -> reportRa(event, title) },
-        // Открыт как приложение — держим службу на время игры, иначе Android заморозит проверки
-        onRunning = { on, title ->
+        // Открыт как приложение — на время игры держим службу, иначе Android заморозит проверки
+        onGame = { on, title ->
             if (on && !isDefaultHome()) {
                 val w = strings.ext.raWatch
                 com.retrohome.launcher.data.RaWatchService.start(context, w.serviceTitle, w.serviceText.format(title), w.serviceChannel)
@@ -360,32 +363,51 @@ class LauncherController(
     )
 
     /** Лаунчер ушёл с экрана (запустилась игра). */
-    fun onLauncherPaused() = raMonitor.launcherPaused()
+    fun onLauncherPaused() = raWatcher.launcherPaused()
 
-    private fun reportRa(event: com.retrohome.launcher.data.RaWatch.Event, title: String) {
+    private fun reportRa(event: com.retrohome.launcher.data.RaWatch.Event, title: String?) {
         val w = strings.ext.raWatch
         val (head, text) = when (event) {
-            com.retrohome.launcher.data.RaWatch.Event.DOWN -> w.downTitle to w.downText.format(title)
-            com.retrohome.launcher.data.RaWatch.Event.OFFLINE -> w.offlineTitle to w.offlineText.format(title)
-            com.retrohome.launcher.data.RaWatch.Event.RESTORED -> w.restoredTitle to w.restoredText.format(title)
+            com.retrohome.launcher.data.RaWatch.Event.DOWN -> w.downTitle to (title?.let { w.downText.format(it) } ?: w.downTextIdle)
+            com.retrohome.launcher.data.RaWatch.Event.OFFLINE -> w.offlineTitle to (title?.let { w.offlineText.format(it) } ?: w.offlineTextIdle)
+            com.retrohome.launcher.data.RaWatch.Event.RESTORED -> w.restoredTitle to (title?.let { w.restoredText.format(it) } ?: w.restoredTextIdle)
         }
         if (!com.retrohome.launcher.data.RaWatch.notify(context, w.channel, head, text)) toast("$head. $text")
     }
 
-    /** Игра с достижениями запущена — следим за сервером RetroAchievements (если включено в настройках). */
+    /** Запущена игра: с достижениями — проверить сервер сразу; без — прежняя игра закончена. */
     private fun checkRaBeforeLaunch(game: com.retrohome.launcher.data.Game, system: GameSystem, title: String) {
-        raMonitor.stop("запущена другая игра")
         if (!data.settings.raCheck) return
         val matches = achievements.state.value.matches
-        if (!com.retrohome.launcher.data.RaWatch.relevant(system, game.id in matches, matches[game.id])) return
-        raMonitor.start(title)
+        if (com.retrohome.launcher.data.RaWatch.relevant(system, game.id in matches, matches[game.id])) raWatcher.gameStarted(title)
+        else raWatcher.endGame("запущена игра без достижений")
+    }
+
+    /** Проверка по расписанию Android (RaJobService). true — идёт, done вызовется по окончании. */
+    fun backgroundRaCheck(done: () -> Unit): Boolean {
+        if (!data.settings.raCheck) return false
+        scope.launch {
+            try {
+                // Лаунчер работает и только что проверял сам — второй раз не нужно
+                raWatcher.checkNow(skipIfRecentMs = 4 * 60_000L)
+            } finally {
+                done()
+            }
+        }
+        return true
     }
 
     fun raWatchNoPermission(): String = strings.ext.raWatch.noPermission
 
     fun toggleRaCheck() {
         store.update { d -> d.copy(settings = d.settings.copy(raCheck = !d.settings.raCheck)) }
-        if (!data.settings.raCheck) raMonitor.stop("проверку выключили")
+        applyRaCheck()
+    }
+
+    private fun applyRaCheck() {
+        val on = data.settings.raCheck
+        com.retrohome.launcher.data.RaJobService.schedule(context, on)
+        if (on) raWatcher.enable() else raWatcher.disable()
     }
 
     /** Есть ли доступ к статистике использования (точный учёт времени в играх). */
@@ -398,7 +420,7 @@ class LauncherController(
         val installed = installedPackages()
         scope.launch(Dispatchers.IO) { com.retrohome.launcher.data.Lemuroid.syncPinned(context, installed) }
         // Вернулись из игры — следить за сервером достижений больше не нужно (если лаунчер не просто мелькнул)
-        raMonitor.launcherResumed()
+        raWatcher.launcherResumed()
         // Вернулись из игры — могли открыться новые достижения
         achievements.refreshProgress()
         settleSession()
@@ -505,6 +527,8 @@ class LauncherController(
     init {
         // Расписание Android: раз в 15 минут, даже если лаунчер закрыт или открыт как приложение
         com.retrohome.launcher.data.UpdateJobService.schedule(context, store.data.value.settings.updateCheck)
+        // Слежение за RetroAchievements — с запуска лаунчера, если включено
+        applyRaCheck()
         // Пока лаунчер работает — сами раз в пару минут (и во время игры тоже)
         scope.launch {
             kotlinx.coroutines.delay(20_000)

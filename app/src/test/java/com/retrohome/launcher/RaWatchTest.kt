@@ -71,72 +71,6 @@ class RaWatchTest {
         assertEquals(null, RaWatch.transition(null, R.UP))
     }
 
-    @Test fun monitorChecksPeriodicallyWithoutSpam() {
-        // Ответы «сервера» по порядку. Сбой подтверждается второй проверкой: короткий обрыв (DOWN, затем UP) — не сбой
-        val answers = ArrayDeque(listOf(
-            R.UP,               // при запуске — работает, молчим
-            R.DOWN, R.UP,       // короткий обрыв — молчим
-            R.DOWN, R.DOWN,     // сбой сервера — одно уведомление
-            R.DOWN, R.DOWN,     // всё ещё сбой — молчим
-            R.OFFLINE, R.OFFLINE, // причина сменилась: пропал интернет — уведомление
-            R.UP,               // связь вернулась — уведомление
-            R.UP, R.UP, R.UP,   // дальше работает — молчим
-        ))
-        val events = java.util.Collections.synchronizedList(mutableListOf<RaWatch.Event>())
-        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default)
-        val m = com.retrohome.launcher.data.RaMonitor(
-            RuntimeEnvironment.getApplication(), scope, version = { "test" },
-            report = { e, title -> assertEquals("Skies of Arcadia", title); events += e },
-            intervalMs = 20, firstConfirmMs = 5, confirmMs = 5,
-            probe = { synchronized(answers) { answers.removeFirstOrNull() ?: R.UP } },
-        )
-        m.start("Skies of Arcadia")
-        kotlinx.coroutines.runBlocking {
-            kotlinx.coroutines.withTimeout(10_000) { while (synchronized(answers) { answers.isNotEmpty() }) kotlinx.coroutines.delay(10) }
-            kotlinx.coroutines.delay(100)
-        }
-        m.stop()
-        assertEquals(listOf(RaWatch.Event.DOWN, RaWatch.Event.OFFLINE, RaWatch.Event.RESTORED), events.toList())
-        assertFalse(m.running)
-    }
-
-    @Test fun briefLauncherFlashDoesNotStopWatching() {
-        val running = java.util.Collections.synchronizedList(mutableListOf<Boolean>())
-        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default)
-        val m = com.retrohome.launcher.data.RaMonitor(
-            RuntimeEnvironment.getApplication(), scope, version = { "test" }, report = { _, _ -> },
-            onRunning = { on, _ -> running += on },
-            intervalMs = 60_000, graceMs = 200, probe = { R.UP },
-        )
-        m.start("Skies of Arcadia")
-        // Эмулятор запускается, лаунчер на миг появляется и снова уходит — слежение продолжается
-        m.launcherResumed()
-        Thread.sleep(50)
-        m.launcherPaused()
-        Thread.sleep(400)
-        assertTrue(m.running)
-        // Вернулись в лаунчер и остались — игра закончена
-        m.launcherResumed()
-        Thread.sleep(600)
-        assertFalse(m.running)
-        // Служба (в режиме приложения) включилась при запуске и выключилась один раз в конце
-        assertEquals(listOf(true, false), running.toList())
-    }
-
-    @Test fun firstWarningComesQuickly() {
-        // Сервер лежит уже при запуске: предупреждение после короткой перепроверки, а не через 15 секунд
-        val events = java.util.Collections.synchronizedList(mutableListOf<RaWatch.Event>())
-        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default)
-        val m = com.retrohome.launcher.data.RaMonitor(
-            RuntimeEnvironment.getApplication(), scope, version = { "test" }, report = { e, _ -> events += e },
-            intervalMs = 60_000, firstConfirmMs = 50, confirmMs = 60_000, probe = { R.DOWN },
-        )
-        m.start("Skies of Arcadia")
-        Thread.sleep(800)
-        m.stop()
-        assertEquals(listOf(RaWatch.Event.DOWN), events.toList())
-    }
-
     @Test fun updateScheduleFollowsSetting() {
         val app = RuntimeEnvironment.getApplication()
         val js = app.getSystemService(android.app.job.JobScheduler::class.java)
@@ -151,6 +85,102 @@ class RaWatchTest {
     @Test fun updateTextMatchesRealInterval() {
         assertFalse(RU.ext.upd.autoDesc.contains("час"))
         assertTrue(RU.ext.upd.autoDesc.contains("пару минут"))
+    }
+
+    private class MemStore : com.retrohome.launcher.data.RaWatcher.Store {
+        override var last: RaWatch.Result? = null
+        override var checkedAt: Long = 0
+    }
+
+    private fun watcher(
+        answers: ArrayDeque<RaWatch.Result>, events: MutableList<Pair<RaWatch.Event, String?>>,
+        store: MemStore = MemStore(), games: MutableList<Boolean> = mutableListOf(), intervalMs: Long = 20, graceMs: Long = 200,
+    ) = com.retrohome.launcher.data.RaWatcher(
+        RuntimeEnvironment.getApplication(), kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default),
+        version = { "test" }, report = { e, t -> events += e to t }, onGame = { on, _ -> games += on },
+        store = store, intervalMs = intervalMs, firstConfirmMs = 5, confirmMs = 5, graceMs = graceMs,
+        probe = { synchronized(answers) { answers.removeFirstOrNull() ?: R.UP } },
+    )
+
+    private fun waitDrained(answers: ArrayDeque<RaWatch.Result>) = kotlinx.coroutines.runBlocking {
+        kotlinx.coroutines.withTimeout(10_000) { while (synchronized(answers) { answers.isNotEmpty() }) kotlinx.coroutines.delay(10) }
+        kotlinx.coroutines.delay(150)
+    }
+
+    @Test fun watchesAlwaysAndNotifiesOnlyOnChanges() {
+        // Игры нет — лаунчер просто следит за сервером в фоне
+        val answers = ArrayDeque(listOf(
+            R.UP,               // работает — молчим
+            R.DOWN, R.UP,       // короткий обрыв — молчим
+            R.DOWN, R.DOWN,     // сбой — одно уведомление
+            R.DOWN, R.DOWN,     // всё ещё сбой — молчим
+            R.OFFLINE, R.OFFLINE, // вне игры пропавший интернет — не повод тревожить
+            R.DOWN, R.DOWN,     // сбой продолжается — молчим
+            R.UP,               // заработал — уведомление
+            R.UP, R.UP,         // работает — молчим
+        ))
+        val events = java.util.Collections.synchronizedList(mutableListOf<Pair<RaWatch.Event, String?>>())
+        val w = watcher(answers, events)
+        w.enable()
+        waitDrained(answers)
+        w.disable()
+        assertEquals(listOf(E.DOWN to null, E.RESTORED to null), events.toList())
+    }
+
+    @Test fun duringGameAlsoReportsMissingInternet() {
+        val answers = ArrayDeque(listOf(R.UP, R.DOWN, R.DOWN, R.OFFLINE, R.OFFLINE, R.UP))
+        val events = java.util.Collections.synchronizedList(mutableListOf<Pair<RaWatch.Event, String?>>())
+        val w = watcher(answers, events)
+        w.gameStarted("Skies of Arcadia")
+        waitDrained(answers)
+        w.disable()
+        assertEquals(
+            listOf(E.DOWN to "Skies of Arcadia", E.OFFLINE to "Skies of Arcadia", E.RESTORED to "Skies of Arcadia"),
+            events.toList(),
+        )
+    }
+
+    @Test fun rememberedStateIsNotRepeatedButGameStartReminds() {
+        val store = MemStore().apply { last = R.DOWN } // о сбое уже сообщили (лаунчер перезапускался)
+        val events = java.util.Collections.synchronizedList(mutableListOf<Pair<RaWatch.Event, String?>>())
+        val answers = ArrayDeque(listOf(R.DOWN, R.DOWN))
+        val w = watcher(answers, events, store, intervalMs = 60_000)
+        w.enable()
+        waitDrained(answers)
+        assertEquals(emptyList<Pair<RaWatch.Event, String?>>(), events.toList()) // не повторяем
+        // Но запуск игры при неработающем сервере — напоминание
+        synchronized(answers) { answers.addAll(listOf(R.DOWN, R.DOWN)) }
+        w.gameStarted("Skies of Arcadia")
+        waitDrained(answers)
+        w.disable()
+        assertEquals(listOf(E.DOWN to "Skies of Arcadia"), events.toList())
+    }
+
+    @Test fun gameEndsWhenLauncherStaysButWatchingContinues() {
+        val games = java.util.Collections.synchronizedList(mutableListOf<Boolean>())
+        val events = java.util.Collections.synchronizedList(mutableListOf<Pair<RaWatch.Event, String?>>())
+        val w = watcher(ArrayDeque(), events, games = games, intervalMs = 60_000)
+        w.gameStarted("Skies of Arcadia")
+        // Лаунчер мелькнул при запуске эмулятора — игра продолжается
+        w.launcherResumed(); Thread.sleep(50); w.launcherPaused(); Thread.sleep(400)
+        assertEquals("Skies of Arcadia", w.game)
+        // Вернулись в лаунчер и остались — игра закончена, но за сервером следим дальше
+        w.launcherResumed(); Thread.sleep(600)
+        assertEquals(null, w.game)
+        assertTrue(w.enabled)
+        assertEquals(listOf(true, false), games.toList())
+        w.disable()
+        assertFalse(w.enabled)
+    }
+
+    @Test fun raScheduleFollowsSetting() {
+        val app = RuntimeEnvironment.getApplication()
+        val js = app.getSystemService(android.app.job.JobScheduler::class.java)
+        com.retrohome.launcher.data.RaJobService.schedule(app, true)
+        val job = js.getPendingJob(com.retrohome.launcher.data.RaJobService.JOB_ID)!!
+        assertEquals(15 * 60_000L, job.intervalMillis)
+        com.retrohome.launcher.data.RaJobService.schedule(app, false)
+        assertEquals(null, js.getPendingJob(com.retrohome.launcher.data.RaJobService.JOB_ID))
     }
 
     @Test fun offByDefault() {

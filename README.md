@@ -83,6 +83,7 @@ cd retro-home
 | tinfoil.media | обложки и описания игр Switch |
 | api.nlib.cc | запасной источник данных Switch (база TitleDB), если tinfoil недоступен |
 | api.github.com, github.com, release-assets.githubusercontent.com | обновления лаунчера: раз в пару минут — изменился ли список выпусков (условный запрос, без лишних данных) (можно выключить в Настройки → Обновление), по вашей команде — скачивание APK. Передаётся только номер версии лаунчера в User-Agent |
+| retroachievements.org (dorequest.php) | только если включено «Следить за RetroAchievements»: раз в 5 минут (раз в 15, когда лаунчер закрыт) — работает ли сервер достижений; без аккаунта и личных данных |
 | connectivitycheck.gstatic.com, cloudflare.com | только если включено «Следить за RetroAchievements в игре» и сервер достижений не ответил: проверить, есть ли интернет вообще (запрос без данных) |
 | retroachievements.org, media.retroachievements.org | достижения (только если вы указали аккаунт; ключ уходит только туда) |
 

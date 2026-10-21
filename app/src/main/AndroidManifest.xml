@@ -124,6 +124,12 @@
                 android:value="Checks RetroAchievements server availability while the user plays a game, to warn when earned achievements cannot be submitted" />
         </service>
 
+        <!-- Проверка сервера RetroAchievements по расписанию (раз в 15 минут), даже когда приложение закрыто -->
+        <service
+            android:name=".data.RaJobService"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+
         <!-- Проверка обновлений по расписанию (раз в 15 минут), даже когда приложение закрыто -->
         <service
             android:name=".data.UpdateJobService"

@@ -10,6 +10,7 @@ import android.os.Build
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -120,93 +121,132 @@ object RaWatch {
 }
 
 /**
- * Слежение за RetroAchievements во время игры: проверка при запуске и дальше примерно раз в 5 минут,
- * пока игра идёт (до возвращения в лаунчер). Уведомления — только при смене состояния (см. [RaWatch.transition]).
+ * Слежение за сервером RetroAchievements, пока включена настройка: раз в 5 минут, пока лаунчер работает,
+ * и по расписанию Android (раз в 15 минут), если лаунчер закрыт или заморожен. При запуске игры с
+ * достижениями — проверка сразу. Уведомления только при смене состояния (см. [RaWatch.transition]);
+ * последнее состояние хранится, поэтому после перезапуска лаунчера уведомления не повторяются.
  */
-class RaMonitor(
+class RaWatcher(
     private val context: Context,
     private val scope: kotlinx.coroutines.CoroutineScope,
     private val version: () -> String,
-    /** Сообщить пользователю (уведомление или, без разрешения, надпись внизу экрана). */
-    private val report: (RaWatch.Event, String) -> Unit,
-    /** Слежение началось (true) или закончилось (false) — в режиме приложения держим службу. */
-    private val onRunning: (Boolean, String) -> Unit = { _, _ -> },
+    /** Сообщить пользователю. title — идущая игра или null (игры нет). */
+    private val report: (RaWatch.Event, String?) -> Unit,
+    /** Игра с достижениями началась (true) или закончилась (false) — в режиме приложения держим службу. */
+    private val onGame: (Boolean, String) -> Unit = { _, _ -> },
+    private val store: Store = PrefsStore(context),
     private val intervalMs: Long = 5 * 60_000L,
-    /** Повторная проверка перед тем, как сообщить о сбое: при запуске игры — быстро, во время игры — с запасом. */
+    /** Повторная проверка перед тем, как сообщить о сбое: при запуске игры — быстро, в остальное время — с запасом. */
     private val firstConfirmMs: Long = 3_000L,
     private val confirmMs: Long = 15_000L,
     /** Лаунчер должен пробыть на экране столько, чтобы считать игру законченной (мелькание при запуске эмулятора не в счёт). */
     private val graceMs: Long = 10_000L,
     private val probe: () -> RaWatch.Result = { RaWatch.probe(context, version()) },
 ) {
-    private var job: kotlinx.coroutines.Job? = null
-    private var pendingStop: kotlinx.coroutines.Job? = null
-    private var title: String = ""
+    /** Где хранится последнее известное состояние сервера. */
+    interface Store {
+        var last: RaWatch.Result?
+        var checkedAt: Long
+    }
 
-    /** Последнее известное состояние сервера в этой игре (null — ещё не проверяли). */
-    var last: RaWatch.Result? = null
+    class PrefsStore(context: Context) : Store {
+        private val prefs = context.getSharedPreferences("ra_watch", Context.MODE_PRIVATE)
+        override var last: RaWatch.Result?
+            get() = prefs.getString("last", null)?.let { runCatching { RaWatch.Result.valueOf(it) }.getOrNull() }
+            set(v) { prefs.edit().putString("last", v?.name).apply() }
+        override var checkedAt: Long
+            get() = prefs.getLong("checkedAt", 0L)
+            set(v) { prefs.edit().putLong("checkedAt", v).apply() }
+    }
+
+    private val lock = kotlinx.coroutines.sync.Mutex()
+    private var loop: kotlinx.coroutines.Job? = null
+    private var pendingEnd: kotlinx.coroutines.Job? = null
+    private val wake = kotlinx.coroutines.channels.Channel<Unit>(kotlinx.coroutines.channels.Channel.CONFLATED)
+
+    /** Идущая игра с достижениями (null — игры нет). */
+    var game: String? = null
         private set
+    /** Только что запустили игру: о недоступности напомнить, даже если о ней уже сообщали. */
+    private var gameJustStarted = false
 
-    val running: Boolean get() = job?.isActive == true
+    val enabled: Boolean get() = loop?.isActive == true
+    val last: RaWatch.Result? get() = store.last
 
-    /** Запущена игра с достижениями — начинаем следить заново. */
-    fun start(title: String) {
-        cancelJobs()
-        this.title = title
-        last = null
-        DiagLog.add("RetroAchievements: слежу за «$title» (раз в ${intervalMs / 60_000} мин)")
-        onRunning(true, title)
-        job = scope.launch {
-            val until = System.currentTimeMillis() + MAX_MS
-            var first = true
-            try {
-                while (isActive && System.currentTimeMillis() < until) {
-                    val r = check(if (first) firstConfirmMs else confirmMs)
-                    first = false
-                    DiagLog.add("RetroAchievements («$title»): $r")
-                    RaWatch.transition(last, r)?.let { report(it, title) }
-                    last = r
-                    delay(intervalMs)
-                }
-            } finally {
-                if (job == coroutineContext[kotlinx.coroutines.Job]) {
-                    job = null
-                    onRunning(false, title)
-                }
+    /** Настройку включили (или лаунчер запустился с ней) — проверяем сейчас и дальше раз в 5 минут. */
+    fun enable() {
+        if (enabled) return
+        DiagLog.add("RetroAchievements: слежу за сервером (раз в ${intervalMs / 60_000} мин)")
+        loop = scope.launch {
+            while (isActive) {
+                checkNow()
+                kotlinx.coroutines.withTimeoutOrNull(intervalMs) { wake.receive() }
             }
         }
     }
 
-    /** Проверку выключили — прекращаем сразу. */
-    fun stop(reason: String = "выключено") {
-        if (!running) { pendingStop?.cancel(); return }
-        DiagLog.add("RetroAchievements: слежение за «$title» остановлено — $reason")
-        cancelJobs()
-        onRunning(false, title)
+    /** Настройку выключили. */
+    fun disable() {
+        endGame("проверку выключили")
+        loop?.cancel()
+        loop = null
     }
 
-    /** Лаунчер снова на экране. Если он там задержится — игра закончена, перестаём следить. */
+    /** Запущена игра с достижениями — проверить сразу. */
+    fun gameStarted(title: String) {
+        pendingEnd?.cancel()
+        game = title
+        gameJustStarted = true
+        DiagLog.add("RetroAchievements: запущена «$title» — проверяю сразу")
+        onGame(true, title)
+        if (enabled) wake.trySend(Unit) else enable()
+    }
+
+    /** Запущена игра без достижений или что-то другое — прежняя игра закончена. */
+    fun endGame(reason: String) {
+        pendingEnd?.cancel()
+        pendingEnd = null
+        val g = game ?: return
+        game = null
+        gameJustStarted = false
+        DiagLog.add("RetroAchievements: игра «$g» закончена — $reason (слежение за сервером продолжается)")
+        onGame(false, g)
+    }
+
+    /** Лаунчер снова на экране. Если он там задержится — игра закончена. */
     fun launcherResumed() {
-        if (!running) return
-        pendingStop?.cancel()
-        pendingStop = scope.launch {
+        if (game == null) return
+        pendingEnd?.cancel()
+        pendingEnd = scope.launch {
             delay(graceMs)
-            stop("вернулись в лаунчер")
+            endGame("вернулись в лаунчер")
         }
     }
 
-    /** Лаунчер ушёл с экрана (снова игра) — продолжаем следить. */
+    /** Лаунчер ушёл с экрана (снова игра) — игра продолжается. */
     fun launcherPaused() {
-        pendingStop?.cancel()
-        pendingStop = null
+        pendingEnd?.cancel()
+        pendingEnd = null
     }
 
-    private fun cancelJobs() {
-        pendingStop?.cancel()
-        pendingStop = null
-        val j = job
-        job = null
-        j?.cancel()
+    /**
+     * Одна проверка (из цикла или по расписанию Android). skipIfRecentMs — не проверять,
+     * если только что проверяли (расписание срабатывает и тогда, когда цикл ещё жив).
+     */
+    suspend fun checkNow(skipIfRecentMs: Long = 0) = lock.withLock {
+        if (skipIfRecentMs > 0 && System.currentTimeMillis() - store.checkedAt in 0 until skipIfRecentMs) return@withLock
+        val started = gameJustStarted
+        val r = check(if (started) firstConfirmMs else confirmMs)
+        store.checkedAt = System.currentTimeMillis()
+        val title = game
+        DiagLog.add("RetroAchievements${title?.let { " («$it»)" } ?: ""}: $r")
+        // Вне игры пропавший интернет — не повод тревожить и ничего не говорит о сервере
+        if (title == null && r == RaWatch.Result.OFFLINE) return@withLock
+        val prev = store.last
+        val event = if (started && r != RaWatch.Result.UP) RaWatch.transition(null, r) else RaWatch.transition(prev, r)
+        if (started) gameJustStarted = false
+        event?.let { report(it, title) }
+        store.last = r
     }
 
     /** Сбой подтверждаем повторной проверкой — короткий обрыв не повод тревожить. */
@@ -215,10 +255,5 @@ class RaMonitor(
         if (first == RaWatch.Result.UP) return first
         delay(confirm)
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { probe() }
-    }
-
-    private companion object {
-        /** Страховка: дольше 8 часов подряд не следим. */
-        const val MAX_MS = 8 * 60 * 60_000L
     }
 }

@@ -102,3 +102,38 @@ class UpdateJobService : JobService() {
         }
     }
 }
+
+/**
+ * Проверка сервера RetroAchievements по расписанию Android — раз в 15 минут (чаще система не разрешает),
+ * даже если Retro Home закрыт или заморожен. Пока лаунчер работает, он проверяет и сам — раз в 5 минут.
+ */
+class RaJobService : JobService() {
+    override fun onStartJob(params: JobParameters): Boolean {
+        val c = (application as? com.retrohome.launcher.LauncherApp)?.controller ?: return false
+        return c.backgroundRaCheck { jobFinished(params, false) }
+    }
+
+    override fun onStopJob(params: JobParameters): Boolean = true
+
+    companion object {
+        const val JOB_ID = 4205
+        const val PERIOD_MS = 15 * 60_000L
+
+        /** Включить или выключить расписание (вслед за настройкой слежения за RetroAchievements). */
+        fun schedule(context: Context, enabled: Boolean) {
+            val js = context.getSystemService(JobScheduler::class.java) ?: return
+            if (!enabled) {
+                js.cancel(JOB_ID)
+                return
+            }
+            if (js.getPendingJob(JOB_ID) != null) return
+            val job = JobInfo.Builder(JOB_ID, ComponentName(context, RaJobService::class.java))
+                .setPeriodic(PERIOD_MS)
+                // Без интернета проверять нечего — Android запустит, когда сеть появится
+                .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+                .setPersisted(true)
+                .build()
+            runCatching { js.schedule(job) }.onFailure { DiagLog.add("расписание RetroAchievements: ${it.javaClass.simpleName}") }
+        }
+    }
+}
