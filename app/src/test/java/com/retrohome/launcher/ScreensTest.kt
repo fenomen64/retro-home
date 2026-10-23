@@ -513,8 +513,8 @@ class ScreensTest {
         compose.runOnIdle { assertTrue(state.pageScroll.value > 0) }
         compose.waitForIdle()
         compose.onRoot().captureRoboImage("$SHOTS/23b_game_page_scrolled.png")
-        // R1 — следующая игра ряда; у неё два диска: Диск 1, Диск 2, Избранное, Ещё
-        compose.runOnIdle { pads.dispatch(Pad.R1) }
+        // R2 — следующая игра ряда; у неё два диска: Диск 1, Диск 2, Избранное, Ещё
+        compose.runOnIdle { pads.dispatch(Pad.R2) }
         compose.runOnIdle { assertEquals("game:ff", state.page); assertEquals(0, state.pageButton) }
         compose.mainClock.advanceTimeBy(600)
         compose.waitForIdle()
@@ -708,11 +708,17 @@ class ScreensTest {
         // Открыли страницу игры и вернулись назад
         compose.runOnIdle { pads.dispatch(Pad.CONFIRM) }
         compose.waitForIdle()
-        compose.runOnIdle { pads.dispatch(Pad.R1); pads.dispatch(Pad.R1) }
+        compose.runOnIdle { pads.dispatch(Pad.R2); pads.dispatch(Pad.R2) }
         compose.waitForIdle()
         compose.runOnIdle { pads.dispatch(Pad.CANCEL) }
         compose.waitForIdle()
-        assertVisible(8, "после страницы игры (R1 по избранному)")
+        assertVisible(8, "после страницы игры (R2 по избранному)")
+        // R1 на странице игры — следующая вкладка консоли, сразу страница выбранной там игры
+        compose.runOnIdle { pads.dispatch(Pad.CONFIRM) }
+        compose.waitForIdle()
+        compose.runOnIdle { pads.dispatch(Pad.R1) }
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals("sys:GBA", state.tabId); assertEquals("game:g2", state.page) }
     }
 
     @Test

@@ -52,8 +52,12 @@ data class GameMeta(
     val textVer: Int = 0,
 )
 
-/** 2 — отсев статей о персонажах, франшизах и т.п. */
-const val TEXT_VERSION = 3
+/**
+ * 2 — отсев статей о персонажах, франшизах и т.п.
+ * 4 — короткие названия больше не совпадают с длинными («The Captain» ≠ «Captain Toad»):
+ *     описания, взятые из статьи с непохожим названием, ищутся заново.
+ */
+const val TEXT_VERSION = 4
 
 /**
  * 3 — цепочка источников описаний (Википедия → Викиданные → eShop) и обложки Switch.
@@ -433,8 +437,12 @@ object Wiki {
         if (key.isEmpty()) return null
         val n = Thumbnails.norm(candidate.replace(Regex("""\s*\([^)]*\)"""), ""))
         if (n.isEmpty()) return null
+        // Название из одного слова («The Captain», «Tetris») слишком общее: статья с более
+        // длинным названием («Captain Toad: Treasure Tracker», «Tetris Effect») — это другая игра
+        val single = titleTokens(gameTitle).size < 2
         return when {
             n == key -> 0
+            single -> null
             n.startsWith(key) -> 1
             // Статья названа короче игры: «Skies of Arcadia» для «Skies of Arcadia Legends».
             // Но не на два слова короче и не без номера части: «Pokémon» — не «Pokémon Brilliant Diamond»,
@@ -447,7 +455,18 @@ object Wiki {
         }
     }
 
-    private fun titleTokens(t: String) = Thumbnails.tokens(t.replace(Regex("""\s*\([^)]*\)"""), ""))
+    /**
+     * Статью раньше (до TEXT_VERSION 4) приняли бы только из-за начала названия: игра из одного
+     * слова, статья длиннее — «The Captain» → «Captain Toad: Treasure Tracker». Такие описания ищем заново.
+     */
+    fun looseOnly(candidate: String, gameTitle: String): Boolean {
+        val key = Thumbnails.norm(gameTitle)
+        val n = Thumbnails.norm(candidate.replace(Regex("""\s*\([^)]*\)"""), ""))
+        if (key.isEmpty() || n == key || titleTokens(gameTitle).size >= 2) return false
+        return n.startsWith(key) || key.length >= 6 && n.contains(key)
+    }
+
+    private fun titleTokens(t: String) =Thumbnails.tokens(t.replace(Regex("""\s*\([^)]*\)"""), ""))
     private fun isNumber(w: String) = w.all { it.isDigit() }
 
     private fun shorterOk(candidate: String, gameTitle: String): Boolean {

@@ -127,10 +127,11 @@ class MetaRepository(
     }
 
     /** Нужно описание или факты (Википедия и Викиданные — с учётом их лимита запросов). */
-    private fun needsText(m: GameMeta?, retryMissing: Boolean): Boolean {
+    private fun needsText(g: Game, m: GameMeta?, title: String?, retryMissing: Boolean): Boolean {
         if (m == null) return true
         if (waiting(m, retryMissing)) return false
-        if (!m.descTried || !m.factsTried || !m.platformChecked || m.textVer < TEXT_VERSION) return true
+        if (!m.descTried || !m.factsTried || !m.platformChecked || m.textVer < 3) return true
+        if (m.textVer < TEXT_VERSION && mismatched(g, m, title)) return true
         return (m.descEn == null && m.descRu == null) && (retryMissing || m.ver < META_VERSION)
     }
 
@@ -151,7 +152,7 @@ class MetaRepository(
         job = scope.launch(Dispatchers.IO) {
             if (!online()) { DiagLog.add("Загрузка не начата: Android сообщает, что интернета нет"); return@launch }
             val visual = games.filter { needsVisual(_meta.value[it.id], retryMissing) }
-            val text = games.filter { needsText(_meta.value[it.id], retryMissing) }
+            val text = games.filter { needsText(it, _meta.value[it.id], titleFor(it), retryMissing) }
             val total = visual.size + text.size
             val waitingCount = games.count { waiting(_meta.value[it.id], retryMissing) }
             DiagLog.add("Загрузка${if (retryMissing) " (повтор ненайденного)" else ""}: игр ${games.size}, нужны обложки ${visual.size}, описания ${text.size}, ждут повтора после сбоя $waitingCount")
@@ -271,6 +272,13 @@ class MetaRepository(
         Platforms.Verdict.PORT -> "≈ консоль только в тексте статьи"
     }
 
+    /** Описание из Википедии взято из статьи, которая подошла только началом названия (см. TEXT_VERSION 4). */
+    private fun mismatched(g: Game, m: GameMeta, title: String?): Boolean {
+        val wiki = m.wikiEn?.takeIf { m.srcEn == null || m.srcEn == DescSource.WIKIPEDIA } ?: return false
+        val names = listOfNotNull(title, g.title).distinct()
+        return names.isNotEmpty() && names.all { Wiki.looseOnly(wiki, it) }
+    }
+
     /** Описание и факты одной игры. */
     private fun processText(g: Game, title: String?, force: Boolean) = synchronized(textLock) { processTextLocked(g, title, force) }
 
@@ -281,7 +289,14 @@ class MetaRepository(
         val sw = if (g.system == GameSystem.SWITCH) SwitchLookup(g, title) else null
         entityStash.clear()
         trace.clear()
-        val recheck = !old.platformChecked || old.textVer < TEXT_VERSION
+        // Описание взято из статьи о другой игре с похожим началом названия — ищем заново
+        // и не берём для поиска официальное название, которое пришло из той же чужой статьи
+        val mismatch = old.textVer < TEXT_VERSION && mismatched(g, old, title)
+        if (mismatch) {
+            log("Старое описание «${old.wikiEn ?: old.wikiRu}» — про другую игру, ищу заново")
+            if (old.name != null && old.wikiEn?.replace(Regex("""\s*\([^)]*\)$"""), "") == old.name) m = m.copy(name = null)
+        }
+        val recheck = !old.platformChecked || old.textVer < 3 || mismatch
         if (force || !old.descTried || (old.descEn == null && old.descRu == null) || recheck) {
             // Для поиска лучше всего подходит официальное название из базы обложек,
             // запасной вариант — название из имени файла
@@ -304,7 +319,7 @@ class MetaRepository(
                 name = m.name ?: d.wikiEn?.replace(Regex("""\s*\([^)]*\)$"""), ""),
                 qid = d.qid,
                 descTried = true, platformChecked = true,
-            ) else if (!error && recheck && runCatching { wrongPlatform(g.system, old.qid, listOfNotNull(old.descEn, old.descRu).joinToString(" ")) || notAGameArticle(old) }.getOrDefault(false)) m.copy(
+            ) else if (!error && recheck && mismatch || !error && recheck && runCatching { wrongPlatform(g.system, old.qid, listOfNotNull(old.descEn, old.descRu).joinToString(" ")) || notAGameArticle(old) }.getOrDefault(false)) m.copy(
                 // Старое описание было про игру для другой консоли, а правильного не нашлось — убираем
                 descEn = null, descRu = null, wikiEn = null, wikiRu = null, srcEn = null, srcRu = null, qid = null,
                 descTried = true, platformChecked = true,
@@ -555,8 +570,43 @@ class MetaRepository(
 
     private fun saveCover(g: Game, bmp: Bitmap, suffix: String = ""): String {
         val out = "${g.id.hashCode().toUInt().toString(16)}$suffix.webp"
-        File(coversDir, out).outputStream().use { bmp.compress(Bitmap.CompressFormat.WEBP_LOSSY, 85, it) }
+        // Обложки Switch из разных источников разных пропорций — приводим к одной (как коробка Switch)
+        val img = if (g.system == GameSystem.SWITCH && suffix.isEmpty()) switchCase(bmp) else bmp
+        File(coversDir, out).outputStream().use { img.compress(Bitmap.CompressFormat.WEBP_LOSSY, 85, it) }
+        if (img !== bmp) img.recycle()
         return out
+    }
+
+    /**
+     * Один раз привести уже скачанные обложки Switch к одной пропорции (вызывать не в главном потоке, до загрузки). Файл сохраняется под
+     * новым именем, чтобы экран сразу перечитал картинку. Только на устройстве, без интернета.
+     */
+    fun normalizeSwitchCovers(games: List<Game>) {
+        val prefs = context.getSharedPreferences("meta", Context.MODE_PRIVATE)
+        if (prefs.getInt("switchCovers", 0) >= SWITCH_COVERS_VERSION) return
+        run {
+            var fixed = 0
+            games.filter { it.system == GameSystem.SWITCH }.forEach { g ->
+                val name = _meta.value[g.id]?.cover ?: return@forEach
+                val file = File(coversDir, name)
+                val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeFile(file.path, opts)
+                if (opts.outWidth <= 0 || opts.outHeight <= 0) return@forEach
+                if (opts.outWidth == SWITCH_W && opts.outHeight == SWITCH_H) return@forEach
+                val src = BitmapFactory.decodeFile(file.path) ?: return@forEach
+                val out = switchCase(src)
+                val newName = "${g.id.hashCode().toUInt().toString(16)}_c${SWITCH_COVERS_VERSION}.webp"
+                val ok = runCatching { File(coversDir, newName).outputStream().use { out.compress(Bitmap.CompressFormat.WEBP_LOSSY, 85, it) } }.isSuccess
+                if (out !== src) out.recycle()
+                src.recycle()
+                if (!ok) return@forEach
+                _meta.update { m -> m[g.id]?.let { m + (g.id to it.copy(cover = newName)) } ?: m }
+                if (newName != name) file.delete()
+                fixed++
+            }
+            if (fixed > 0) { save(); DiagLog.add("[SWITCH] обложки приведены к одному размеру: $fixed") }
+            prefs.edit().putInt("switchCovers", SWITCH_COVERS_VERSION).apply()
+        }
     }
 
     // --- Switch ---
@@ -668,35 +718,42 @@ class MetaRepository(
             { tinfoil(SwitchDb.iconUrl(id)) },
             { getBytes(SwitchDb.nlibIconUrl(id)) },
         ).firstNotNullOfOrNull { load -> load()?.let { BitmapFactory.decodeByteArray(it, 0, it.size) } } ?: return null.also { DiagLog.add("[SWITCH] ${sw.game.title}: иконка не загрузилась (${lastProblem.get() ?: "нет в базах"})") }
-        val poster = switchPoster(icon)
+        val out = saveCover(sw.game, icon)
         icon.recycle()
-        val out = saveCover(sw.game, poster)
-        poster.recycle()
         return Triple(out, sw.name, null)
     }
 
     /**
-     * Иконка Switch квадратная, а карточки — как коробка 3:4. Делаем «коробку»:
-     * сверху и снизу размытый фон в цветах самой иконки, иконка по центру.
+     * Обложка Switch в пропорциях коробки Switch. Если картинка почти такой формы — подрезаем края,
+     * иначе (квадратная иконка, широкий баннер) ставим её целиком по центру, а пустое место
+     * заполняем размытым фоном из цветов самой картинки.
      */
-    private fun switchPoster(icon: Bitmap): Bitmap {
-        val w = 384
-        val h = 512
+    private fun switchCase(src: Bitmap): Bitmap {
+        val w = SWITCH_W
+        val h = SWITCH_H
         val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val c = Canvas(out)
-        // Фон: середина иконки в пропорции 3:4, сильно размытая (уменьшить и растянуть обратно)
-        val cw = icon.width * 3 / 4
-        val middle = Bitmap.createBitmap(icon, (icon.width - cw) / 2, 0, cw, icon.height)
-        val tiny = Bitmap.createScaledBitmap(middle, 9, 12, true)
+        val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+        val target = w.toFloat() / h
+        val ar = src.width.toFloat() / src.height
+        if (kotlin.math.abs(ar - target) / target <= 0.07f) {
+            // Почти коробка: заполняем целиком, лишнее по краям обрезается
+            val (cw, ch) = if (ar > target) (src.height * target).toInt() to src.height else src.width to (src.width / target).toInt()
+            val sx = (src.width - cw) / 2
+            val sy = (src.height - ch) / 2
+            c.drawBitmap(src, android.graphics.Rect(sx, sy, sx + cw, sy + ch), RectF(0f, 0f, w.toFloat(), h.toFloat()), paint)
+            return out
+        }
+        val tiny = Bitmap.createScaledBitmap(src, 9, 14, true)
         val blur = Bitmap.createScaledBitmap(tiny, w, h, true)
         c.drawBitmap(blur, 0f, 0f, null)
         c.drawColor(android.graphics.Color.argb(90, 0, 0, 0))
-        if (middle != icon) middle.recycle()
-        val top = (h - w) / 2f
-        val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
-        c.drawBitmap(icon, null, RectF(0f, top, w.toFloat(), top + w), paint)
         tiny.recycle()
         blur.recycle()
+        val scale = minOf(w.toFloat() / src.width, h.toFloat() / src.height)
+        val dw = src.width * scale
+        val dh = src.height * scale
+        c.drawBitmap(src, null, RectF((w - dw) / 2, (h - dh) / 2, (w + dw) / 2, (h + dh) / 2), paint)
         return out
     }
 
@@ -947,7 +1004,11 @@ class MetaRepository(
     }
 
     companion object {
-        const val VERSION = "0.47"
+        const val VERSION = "0.48"
+        /** Размер обложек Switch: пропорции коробки Switch (≈ 0.62). */
+        const val SWITCH_W = 400
+        const val SWITCH_H = 645
+        const val SWITCH_COVERS_VERSION = 1
         /** Страница проекта — контакт в подписи запросов (Issues для связи). */
         const val PROJECT_URL = "https://github.com/fenomen64/retro-home"
         const val USER_AGENT = "RetroHome/$VERSION (personal Android game launcher)"

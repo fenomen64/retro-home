@@ -114,3 +114,23 @@ class MetaInTabsTest {
         assertTrue(f.descFallback)
     }
 }
+
+
+class ShortTitleMatchTest {
+    @Test fun oneWordTitleDoesNotMatchLongerArticle() {
+        // «The Captain» — другая игра, не «Captain Toad: Treasure Tracker»
+        assertNull(Wiki.similarity("Captain Toad: Treasure Tracker", "The Captain"))
+        assertTrue(Wiki.rankTitles(listOf("Captain Toad: Treasure Tracker", "Captain (video game)"), "The Captain") == listOf("Captain (video game)"))
+        assertEquals(0, Wiki.similarity("Captain Toad: Treasure Tracker", "Captain Toad - Treasure Tracker"))
+        assertNull(Wiki.similarity("Tetris Effect", "Tetris"))
+        assertEquals(0, Wiki.similarity("Doom (1993 video game)", "Doom"))
+        // Длинные названия по-прежнему находят статьи с уточнением
+        assertEquals(1, Wiki.similarity("Skies of Arcadia Legends", "Skies of Arcadia"))
+    }
+
+    @Test fun oldWrongMatchIsDetected() {
+        assertTrue(Wiki.looseOnly("Captain Toad: Treasure Tracker", "The Captain"))
+        assertFalse(Wiki.looseOnly("Captain Toad: Treasure Tracker", "Captain Toad: Treasure Tracker"))
+        assertFalse(Wiki.looseOnly("Skies of Arcadia Legends", "Skies of Arcadia"))
+    }
+}

@@ -150,6 +150,8 @@ fun GamePage(
     onOptions: () -> Unit,
     onFavorite: () -> Unit,
     onSwitch: (Int) -> Unit,
+    /** L1/R1 — соседняя вкладка консоли. */
+    onConsole: (Int) -> Unit = {},
 ) {
     val s = LocalStrings.current
     val buttons = pageButtons(e)
@@ -290,10 +292,8 @@ fun GamePage(
                 PageHint("X", s.hintOptions, onOptions)
                 PageHint("Y", s.hintFavorite, onFavorite)
                 Spacer(Modifier.weight(1f))
-                if (canSwitch) {
-                    PageHint("L1", "", { onSwitch(-1) })
-                    PageHint("R1", s.otherGame, { onSwitch(1) })
-                }
+                PageHint("L1", "", { onConsole(-1) })
+                PageHint("R1", s.otherConsole, { onConsole(1) })
             }
         }
     }
@@ -394,7 +394,7 @@ private fun PageButtonView(b: PageButton, e: ConsoleEntry, selected: Boolean, on
     val s = LocalStrings.current
     val shape = RoundedCornerShape(50)
     val fav = b == PageButton.Favorite && e.favorite
-    // Анимации привязаны к игре: при переключении L1/R1 на другую игру — без «заливки» заново
+    // Анимации привязаны к игре: при переключении на другую игру — без «заливки» заново
     val fill = remember(e.key, b) { Animatable(if (fav) 1f else 0f) }
     val pop = remember(e.key, b) { Animatable(1f) }
     val burst = remember(e.key, b) { Animatable(1f) }

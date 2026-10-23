@@ -28,6 +28,8 @@ data class ScanResult(
     val games: List<Game> = emptyList(),
     val folders: List<FolderInfo> = emptyList(),
     val time: Long = 0,
+    /** Папка, которую сканировали (чтобы после смены папки не ждать «старые» игры). */
+    val tree: String? = null,
 )
 
 /** Значение ручного назначения «не использовать папку». */

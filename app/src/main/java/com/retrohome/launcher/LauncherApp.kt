@@ -137,7 +137,11 @@ class LauncherController(
                         r.folders.joinToString("; ", " — ") { f -> "${f.name}→${f.system?.name ?: "не используется"} (${f.gameCount})" }
                 )
                 if (r.games.isNotEmpty() && !data.settings.autoMeta) com.retrohome.launcher.data.DiagLog.add("Автозагрузка обложек и описаний выключена в настройках")
-                if (r.games.isNotEmpty() && data.settings.autoMeta) metas.fetch(r.games, ::titleOverride)
+                if (r.games.isNotEmpty()) scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                    // Сначала (один раз) выравниваем старые обложки Switch, потом догружаем новое
+                    runCatching { metas.normalizeSwitchCovers(r.games) }
+                    if (data.settings.autoMeta) metas.fetch(r.games, ::titleOverride)
+                }
             }
         }
         // Первый запуск: всё раскладываем по экранам; дальше — новые установки

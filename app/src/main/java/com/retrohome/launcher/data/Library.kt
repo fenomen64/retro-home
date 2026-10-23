@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import java.io.File
@@ -75,21 +76,36 @@ class GameLibrary(private val context: Context, private val scope: CoroutineScop
     }
 
     fun rescan(tree: String?, overrides: Map<String, String>) {
-        if (!hasAccess(tree)) {
-            _result.value = ScanResult()
-            return
-        }
         job?.cancel()
         job = scope.launch(Dispatchers.IO) {
             _scanning.value = true
             try {
-                val r = Scanner.scan(SafFileSource(context, Uri.parse(tree)), overrides)
-                _result.value = r
-                runCatching { cacheFile.writeText(json.encodeToString(ScanResult.serializer(), r)) }
+                // Сразу после включения приставки карта памяти и доступ к папке появляются не сразу:
+                // папка «пустая» — это ещё не значит, что игр нет. Если раньше игры были, ждём и
+                // сканируем ещё раз, а старый список пока остаётся (иначе пропадают вкладки консолей).
+                val hadGames = _result.value.games.isNotEmpty() && _result.value.tree.let { it == null || it == tree }
+                var r: ScanResult? = null
+                for ((attempt, wait) in RETRY_DELAYS_MS.withIndex()) {
+                    if (wait > 0) delay(wait)
+                    r = if (hasAccess(tree)) Scanner.scan(SafFileSource(context, Uri.parse(tree!!)), overrides).copy(tree = tree) else ScanResult(tree = tree)
+                    if (r.games.isNotEmpty() || !hadGames) break
+                    DiagLog.add("Сканирование: папка с играми пока недоступна или пуста (попытка ${attempt + 1}) — оставляю прежний список")
+                }
+                val res = r ?: return@launch
+                if (res.games.isEmpty() && hadGames) DiagLog.add("Сканирование: игр так и нет — список очищен")
+                _result.value = res
+                if (hasAccess(tree)) saveCache(res)
             } finally {
                 _scanning.value = false
             }
         }
+    }
+
+    /** Запись через временный файл: если приставка выключится посреди записи, старый список не испортится. */
+    private fun saveCache(r: ScanResult) = runCatching {
+        val tmp = File(cacheFile.parentFile, cacheFile.name + ".tmp")
+        tmp.writeText(json.encodeToString(ScanResult.serializer(), r))
+        if (!tmp.renameTo(cacheFile)) { cacheFile.delete(); tmp.renameTo(cacheFile) }
     }
 
     fun documentUri(tree: String, game: Game): Uri = SafFileSource(context, Uri.parse(tree)).documentUri(game.id)
@@ -97,4 +113,9 @@ class GameLibrary(private val context: Context, private val scope: CoroutineScop
     private fun loadCache(): ScanResult = runCatching {
         if (cacheFile.exists()) json.decodeFromString(ScanResult.serializer(), cacheFile.readText()) else ScanResult()
     }.getOrElse { ScanResult() }
+
+    companion object {
+        /** Повторы сканирования, пока папка с играми недоступна: сразу, потом через 3, 5, 10, 20, 30 и 60 секунд. */
+        val RETRY_DELAYS_MS = listOf(0L, 3_000L, 5_000L, 10_000L, 20_000L, 30_000L, 60_000L)
+    }
 }

@@ -376,7 +376,7 @@ fun ConsoleHome(
         }
     }
 
-    /** Соседняя игра в том же ряду (L1/R1 на странице игры). */
+    /** Соседняя игра в том же ряду (L2/R2 на странице игры). */
     fun switchGame(dir: Int) {
         val t = tabsNow
         val row = state.row(t)
@@ -388,6 +388,32 @@ fun ConsoleHome(
         state.select(row, next.index)
         state.openPage(next.value.key)
         sfx.play(Sfx.MOVE)
+    }
+
+    /**
+     * L1/R1 на странице игры: соседняя вкладка консоли, сразу страница выбранной там игры.
+     * Вкладки без игр (Главная, Эмуляторы, приложения) пропускаются.
+     */
+    fun switchConsole(dir: Int) {
+        val t = tabsNow
+        val start = state.tab
+        for (k in 1 until t.size) {
+            val idx = (start + dir * k).mod(t.size)
+            val rows = t[idx].rows
+            if (t[idx].list || rows.none { r -> r.entries.any { it.kind == EntryKind.GAME } }) continue
+            state.tab = idx
+            val sel = state.selected(t)
+            if (sel != null && sel.kind == EntryKind.GAME) {
+                state.openPage(sel.key)
+            } else {
+                val r = rows.indexOfFirst { row -> row.entries.any { it.kind == EntryKind.GAME } }
+                val i = rows[r].entries.indexOfFirst { it.kind == EntryKind.GAME }
+                state.select(r, i)
+                state.openPage(rows[r].entries[i].key)
+            }
+            sfx.play(Sfx.TAB)
+            return
+        }
     }
 
     val handler: (Pad) -> Boolean = remember(state, actions, sfx) {
@@ -406,8 +432,10 @@ fun ConsoleHome(
                     Pad.CANCEL -> { state.page = null; sfx.play(Sfx.BACK) }
                     Pad.X -> { state.menuIndex = 0; state.overlay = ConsoleOverlay.Item(pageEntry); sfx.play(Sfx.MENU) }
                     Pad.Y -> { actions.toggleFavorite(pageEntry.key); sfx.play(Sfx.FAVORITE) }
-                    Pad.L1, Pad.L2 -> switchGame(-1)
-                    Pad.R1, Pad.R2 -> switchGame(1)
+                    Pad.L2 -> switchGame(-1)
+                    Pad.R2 -> switchGame(1)
+                    Pad.L1 -> switchConsole(-1)
+                    Pad.R1 -> switchConsole(1)
                     Pad.START -> { state.menuIndex = 0; state.overlay = ConsoleOverlay.Start; sfx.play(Sfx.MENU) }
                     Pad.SELECT -> { sfx.play(Sfx.SELECT); actions.openSearch() }
                 }
@@ -604,6 +632,7 @@ fun ConsoleHome(
                     onOptions = { state.menuIndex = 0; state.overlay = ConsoleOverlay.Item(e); sfx.play(Sfx.MENU) },
                     onFavorite = { actions.toggleFavorite(e.key); sfx.play(Sfx.FAVORITE) },
                     onSwitch = ::switchGame,
+                    onConsole = ::switchConsole,
                 )
                 }
             }
