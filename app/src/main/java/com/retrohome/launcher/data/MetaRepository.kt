@@ -274,9 +274,14 @@ class MetaRepository(
 
     /** Описание из Википедии взято из статьи, которая подошла только началом названия (см. TEXT_VERSION 4). */
     private fun mismatched(g: Game, m: GameMeta, title: String?): Boolean {
-        val wiki = m.wikiEn?.takeIf { m.srcEn == null || m.srcEn == DescSource.WIKIPEDIA } ?: return false
         val names = listOfNotNull(title, g.title).distinct()
-        return names.isNotEmpty() && names.all { Wiki.looseOnly(wiki, it) }
+        if (names.isEmpty()) return false
+        val wikiEn = m.wikiEn?.takeIf { m.srcEn == null || m.srcEn == DescSource.WIKIPEDIA }
+        val wikiRu = m.wikiRu?.takeIf { m.srcRu == null || m.srcRu == DescSource.WIKIPEDIA }
+        // До версии 4: статья подошла только началом названия
+        if (m.textVer < 4 && wikiEn != null && names.all { Wiki.looseOnly(wikiEn, it) }) return true
+        // До версии 5: название из одного слова — консоль в статье строго не проверялась
+        return m.textVer < 5 && (wikiEn != null || wikiRu != null) && names.all { Wiki.isShortTitle(it) }
     }
 
     /** Описание и факты одной игры. */
@@ -604,7 +609,12 @@ class MetaRepository(
                 if (newName != name) file.delete()
                 fixed++
             }
-            if (fixed > 0) { save(); DiagLog.add("[SWITCH] обложки приведены к одному размеру: $fixed") }
+            // Версия 2: появились настоящие сканы коробок (GameTDB) — обложки Switch один раз ищутся заново.
+            // Старая обложка остаётся, пока новая не найдена.
+            val switchIds = games.filter { it.system == GameSystem.SWITCH }.map { it.id }.toSet()
+            _meta.update { m -> m.mapValues { (k, v) -> if (k in switchIds) v.copy(coverTried = false) else v } }
+            if (fixed > 0) DiagLog.add("[SWITCH] обложки приведены к одному размеру: $fixed")
+            save()
             prefs.edit().putInt("switchCovers", SWITCH_COVERS_VERSION).apply()
         }
     }
@@ -641,6 +651,47 @@ class MetaRepository(
         }
         if (entries.isEmpty()) return null
         return SwitchIndex(entries).also { switchIndex = it }
+    }
+
+    /** База GameTDB: название игры Switch -> её номера в GameTDB (настоящие сканы коробок). Хранится месяц. */
+    private class TdbIndex(entries: List<Pair<String, String>>) {
+        val idsByName: Map<String, List<String>> = entries.groupBy({ it.second }, { it.first })
+        val index = Thumbnails.Index(idsByName.keys.toList())
+    }
+
+    private var tdbIndex: TdbIndex? = null
+    @Volatile private var tdbFailedAt = 0L
+
+    @Synchronized
+    private fun tdbIndex(): TdbIndex? {
+        tdbIndex?.let { return it }
+        if (System.currentTimeMillis() - tdbFailedAt < 10 * 60_000) return null
+        val file = File(indexDir, "SWITCH_gametdb.tsv")
+        val fresh = file.exists() && System.currentTimeMillis() - file.lastModified() < 30L * 24 * 3600 * 1000
+        fun cached() = file.readLines().mapNotNull { l -> l.split('\t', limit = 2).takeIf { it.size == 2 }?.let { it[0] to it[1] } }
+        val entries = if (fresh) cached() else {
+            val list = getBytes(SwitchDb.TDB_URL)?.let { runCatching { SwitchDb.parseTdbZip(it.inputStream()) }.getOrNull() }.orEmpty()
+            when {
+                list.isNotEmpty() -> list.also { file.writeText(it.joinToString("\n") { e -> "${e.first}\t${e.second}" }); DiagLog.add("База обложек Switch (GameTDB): ${it.size} игр") }
+                file.exists() && file.length() > 0 -> cached()
+                else -> { tdbFailedAt = System.currentTimeMillis(); DiagLog.add("База обложек Switch (GameTDB) недоступна (${lastProblem.get() ?: "?"})"); return null }
+            }
+        }
+        if (entries.isEmpty()) return null
+        return TdbIndex(entries).also { tdbIndex = it }
+    }
+
+    /** Скан коробки Switch из GameTDB: сначала европейская (EN), потом американская и другие. */
+    private fun tdbCover(sw: SwitchLookup): Pair<Bitmap, String>? {
+        val idx = runCatching { tdbIndex() }.getOrNull() ?: return null
+        val names = listOfNotNull(sw.title, sw.eu?.title?.ifBlank { null }, sw.name, sw.game.title).distinct()
+        val hit = names.firstNotNullOfOrNull { n -> Thumbnails.match("x.nsp", idx.index, n) } ?: return null
+        for (id in idx.idsByName[hit].orEmpty().take(3)) for (region in SwitchDb.TDB_REGIONS) {
+            val bmp = getBytes(SwitchDb.tdbCoverUrl(region, id))?.let { BitmapFactory.decodeByteArray(it, 0, it.size) } ?: continue
+            DiagLog.add("[SWITCH] ${sw.game.title}: коробка GameTDB $id/$region («$hit»)")
+            return bmp to hit
+        }
+        return null
     }
 
     /** Сайты, которые не отвечали: до этого времени к ним не обращаемся. */
@@ -705,8 +756,14 @@ class MetaRepository(
     }
 
     private fun fetchSwitchCover(sw: SwitchLookup): Triple<String, String?, String?>? {
+        // Лучше всего — настоящий скан коробки из GameTDB (по названию игры)
+        tdbCover(sw)?.let { (box, name) ->
+            val out = saveCover(sw.game, box)
+            box.recycle()
+            return Triple(out, sw.name ?: name, name)
+        }
         val id = sw.id ?: return null
-        // Лучше всего — коробка из европейской базы Nintendo: настоящая обложка, сохраняем как есть
+        // Иначе картинка из европейской базы Nintendo (часто квадратная — приводится к форме коробки)
         sw.eu?.box?.let { url -> getBytes(url)?.let { BitmapFactory.decodeByteArray(it, 0, it.size) } }?.let { box ->
             val out = saveCover(sw.game, box)
             box.recycle()
@@ -885,11 +942,14 @@ class MetaRepository(
      * иначе статья с точно таким же названием, где наша консоль упомянута только в тексте (порт).
      * Ремейки («Final Fantasy VII Remake» упоминает PlayStation как оригинал) так не проходят: название другое.
      */
-    private fun choose(system: GameSystem, candidates: List<Wiki.Page>, exact: (Wiki.Page) -> Boolean = { false }): Wiki.Page? {
+    private fun choose(system: GameSystem, candidates: List<Wiki.Page>, exact: (Wiki.Page) -> Boolean = { false }, strict: Boolean = false): Wiki.Page? {
         if (candidates.isEmpty()) return null
         val v = verdicts(system, candidates)
         candidates.forEach { log("   • ${it.title} ${mark(v[it.title] ?: Platforms.Verdict.UNKNOWN)}") }
-        return candidates.firstOrNull { v[it.title] == Platforms.Verdict.CONFIRMED }
+        val confirmed = candidates.firstOrNull { v[it.title] == Platforms.Verdict.CONFIRMED }
+        // Короткое название: без подтверждённой консоли не верим (так находились фильмы и книги с тем же именем)
+        if (strict && Platforms.checkable(system)) return confirmed.also { if (it == null) log("   короткое название — нужна статья, где указана ${system.en}") }
+        return confirmed
             ?: candidates.firstOrNull { v[it.title] == Platforms.Verdict.UNKNOWN }
             ?: candidates.firstOrNull { v[it.title] == Platforms.Verdict.PORT && exact(it) }
     }
@@ -897,7 +957,9 @@ class MetaRepository(
     private fun findArticle(lang: String, g: Game, title: String, linkTo: String?): Wiki.Page? {
         // Сначала с уточнением «игра + платформа», потом просто по названию
         val tried = HashSet<String>()
-        for (q in listOf(Wiki.searchQuery(lang, title, g.system), title)) {
+        // Всегда с названием консоли: сначала «игра + консоль», потом «название + консоль»
+        val strict = Wiki.isShortTitle(title)
+        for (q in listOf(Wiki.searchQuery(lang, title, g.system), "$title ${g.system.en}")) {
             val errBefore = errorsHere()
             val results = get(Wiki.searchUrl(lang, q))?.let(Wiki::parseHits).orEmpty()
             log(if (errorsHere() > errBefore) "$lang: «$q» — сбой сети" else "$lang: «$q» — найдено ${results.size}")
@@ -912,13 +974,13 @@ class MetaRepository(
             val exact = { p: Wiki.Page ->
                 Wiki.sameTitle(p.title, title) || results.any { h -> h.title == p.title && h.redirect?.let { Wiki.sameTitle(it, title) } == true }
             }
-            choose(g.system, good, exact)?.let { log("   → ${it.title}"); return it }
+            choose(g.system, good, exact, strict)?.let { log("   → ${it.title}"); return it }
             // Название статьи не совпало: может, игра упомянута в её начале под другим (региональным) названием
             val others = results.map { it.title }.filter { tried.add(it) }.take(3)
             val more = pages(lang, others, linkTo)
             val mentioned = others.mapNotNull { more[it] }
                 .filter { !it.disambiguation && Wiki.looksLikeGame(it.summary(), lang) && Wiki.leadMentions(it.extract, title) }
-            choose(g.system, mentioned)?.let { log("   → ${it.title} (по другому названию)"); return it }
+            choose(g.system, mentioned, strict = strict)?.let { log("   → ${it.title} (по другому названию)"); return it }
         }
         return null
     }
@@ -937,6 +999,7 @@ class MetaRepository(
             val labels = platformLabels(ordered)
             val verdicts = ordered.associateWith { verdictOf(g.system, it, labels, "") }
             ordered.firstOrNull { verdicts[it] == Platforms.Verdict.CONFIRMED }?.let { return it }
+            if (Wiki.isShortTitle(t)) continue
             ordered.firstOrNull { verdicts[it] == Platforms.Verdict.UNKNOWN }?.let { return it }
         }
         return null
@@ -1004,11 +1067,11 @@ class MetaRepository(
     }
 
     companion object {
-        const val VERSION = "0.48"
+        const val VERSION = "0.49"
         /** Размер обложек Switch: пропорции коробки Switch (≈ 0.62). */
         const val SWITCH_W = 400
         const val SWITCH_H = 645
-        const val SWITCH_COVERS_VERSION = 1
+        const val SWITCH_COVERS_VERSION = 2
         /** Страница проекта — контакт в подписи запросов (Issues для связи). */
         const val PROJECT_URL = "https://github.com/fenomen64/retro-home"
         const val USER_AGENT = "RetroHome/$VERSION (personal Android game launcher)"

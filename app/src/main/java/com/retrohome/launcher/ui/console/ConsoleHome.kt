@@ -152,6 +152,8 @@ class ConsoleState {
     var page by mutableStateOf<String?>(null)
     var pageButton by mutableIntStateOf(0)
     var pageScroll by mutableStateOf(ScrollState(0))
+    /** Прокрутка описания выбранной игры на Главной (для правого стика). */
+    var homeInfoScroll: ScrollState? = null
     var achList by mutableStateOf(androidx.compose.foundation.lazy.LazyListState())
     /** В панели достижений — только ещё не открытые. */
     var achLockedOnly by mutableStateOf(false)
@@ -539,6 +541,7 @@ fun ConsoleHome(
                     state.overlay is ConsoleOverlay.Description -> state.descScroll.dispatchRawDelta(d)
                     state.overlay is ConsoleOverlay.Achievements -> state.achList.dispatchRawDelta(d)
                     state.overlay == null && state.page != null -> state.pageScroll.dispatchRawDelta(d)
+                    state.overlay == null && state.tabId == "home" -> state.homeInfoScroll?.dispatchRawDelta(d)
                 }
             }
         }

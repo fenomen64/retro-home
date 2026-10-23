@@ -658,6 +658,7 @@ val RU = Strings(
         lCoversMirror = "Обложки — запасной источник (GitHub)",
         lSwitchMirror = "Игры Switch — запасной источник (nlib.cc)",
         lSwitchEu = "Обложки Switch (база Nintendo Europe)",
+        lSwitchTdb = "Коробки Switch (GameTDB)",
         lUpdates = "Обновления лаунчера (github.com)",
         kNoDns = "Не удаётся найти сайт: нет интернета, не работает DNS или сайт заблокирован. Попробуйте другую сеть; в настройках Android проверьте «Частный DNS».",
         kTimeout = "Сайт не отвечает: соединение слишком медленное или блокируется. Попробуйте другую сеть или VPN.",
@@ -1059,6 +1060,7 @@ val EN = Strings(
         lCoversMirror = "Covers — backup source (GitHub)",
         lSwitchMirror = "Switch games — backup source (nlib.cc)",
         lSwitchEu = "Switch covers (Nintendo Europe catalog)",
+        lSwitchTdb = "Switch boxes (GameTDB)",
         lUpdates = "Launcher updates (github.com)",
         kNoDns = "Can't find the site: no internet, DNS isn't working, or the site is blocked. Try another network and check Android's Private DNS setting.",
         kTimeout = "The site doesn't respond: the connection is too slow or blocked. Try another network or a VPN.",
@@ -1289,6 +1291,7 @@ data class NetStrings(
     val lCoversMirror: String,
     val lSwitchMirror: String,
     val lSwitchEu: String,
+    val lSwitchTdb: String,
     val lUpdates: String,
     val kNoDns: String,
     val kTimeout: String,
@@ -1303,7 +1306,7 @@ data class NetStrings(
     val problemHint: String,
 ) {
     fun label(id: String) = when (id) {
-        "covers" -> lCovers; "coversMirror" -> lCoversMirror; "wikiEn" -> lWikiEn; "wikiRu" -> lWikiRu; "wikidata" -> lWikidata; "switch" -> lSwitch; "switchMirror" -> lSwitchMirror; "switchEu" -> lSwitchEu; "updates" -> lUpdates; else -> lRa
+        "covers" -> lCovers; "coversMirror" -> lCoversMirror; "wikiEn" -> lWikiEn; "wikiRu" -> lWikiRu; "wikidata" -> lWikidata; "switch" -> lSwitch; "switchMirror" -> lSwitchMirror; "switchEu" -> lSwitchEu; "switchTdb" -> lSwitchTdb; "updates" -> lUpdates; else -> lRa
     }
 
     fun explain(kind: com.retrohome.launcher.data.NetworkCheck.Kind) = when (kind) {

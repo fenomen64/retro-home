@@ -114,7 +114,7 @@ internal fun HomeList(
             }
         }
         Spacer(Modifier.width(20.dp))
-        InfoPanel(selected, Modifier.weight(0.54f).fillMaxHeight())
+        InfoPanel(selected, Modifier.weight(0.54f).fillMaxHeight()) { state.homeInfoScroll = it }
     }
 }
 
@@ -322,7 +322,7 @@ private fun Modifier.fadingVertical(state: androidx.compose.foundation.lazy.Lazy
 
 /** Сведения о выбранном: для игры — как на её странице, для приложения — значок и подпись. */
 @Composable
-private fun InfoPanel(e: ConsoleEntry?, modifier: Modifier) {
+private fun InfoPanel(e: ConsoleEntry?, modifier: Modifier, onScroll: (androidx.compose.foundation.ScrollState?) -> Unit = {}) {
     val s = LocalStrings.current
     Box(
         modifier
@@ -339,6 +339,8 @@ private fun InfoPanel(e: ConsoleEntry?, modifier: Modifier) {
                     Text(e.label, color = Palette.text, fontSize = 21.sp, fontWeight = FontWeight.Bold, lineHeight = 25.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     Spacer(Modifier.height(4.dp))
                     val scroll = rememberScrollState()
+                    // Правый стик на Главной прокручивает это описание
+                    androidx.compose.runtime.DisposableEffect(scroll) { onScroll(scroll); onDispose { onScroll(null) } }
                     Column(Modifier.weight(1f).fillMaxWidth().fadingEdges(scroll).verticalScroll(scroll)) {
                         Text(playLine(s, e), color = Palette.accent, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
                         e.ra?.let { AchievementsLine(it, Modifier.padding(top = 5.dp)) }

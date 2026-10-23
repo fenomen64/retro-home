@@ -57,7 +57,9 @@ data class GameMeta(
  * 4 — короткие названия больше не совпадают с длинными («The Captain» ≠ «Captain Toad»):
  *     описания, взятые из статьи с непохожим названием, ищутся заново.
  */
-const val TEXT_VERSION = 4
+// 5 — поиск всегда с названием консоли; для названий из одного слова статья должна подтверждать
+//     консоль (иначе находился, например, фильм с тем же названием) — такие описания ищутся заново.
+const val TEXT_VERSION = 5
 
 /**
  * 3 — цепочка источников описаний (Википедия → Викиданные → eShop) и обложки Switch.
@@ -466,7 +468,10 @@ object Wiki {
         return n.startsWith(key) || key.length >= 6 && n.contains(key)
     }
 
-    private fun titleTokens(t: String) =Thumbnails.tokens(t.replace(Regex("""\s*\([^)]*\)"""), ""))
+    /** Название из одного слова («The Captain», «Okami»): по нему легко найти чужую статью — нужна проверка консоли. */
+    fun isShortTitle(t: String) = titleTokens(t).size < 2
+
+    private fun titleTokens(t: String) = Thumbnails.tokens(t.replace(Regex("""\s*\([^)]*\)"""), ""))
     private fun isNumber(w: String) = w.all { it.isDigit() }
 
     private fun shorterOk(candidate: String, gameTitle: String): Boolean {
@@ -710,6 +715,48 @@ object Wikidata {
  */
 object SwitchDb {
     const val LIST_URL = "https://tinfoil.media/Title/ApiJson/"
+
+    // --- GameTDB: сканы настоящих коробок Switch (3.8 МБ архив со списком игр, картинки по номеру) ---
+    const val TDB_URL = "https://www.gametdb.com/switchtdb.zip"
+    /** EN — европейская коробка (PEGI), US — американская. */
+    val TDB_REGIONS = listOf("EN", "US", "DE", "FR", "ES", "IT", "JA")
+    fun tdbCoverUrl(region: String, id: String) = "https://art.gametdb.com/switch/coverM/$region/$id.jpg"
+
+    /** Из архива switchtdb.zip: (номер GameTDB, английское название). Читается потоком — файл большой. */
+    fun parseTdbZip(input: java.io.InputStream): List<Pair<String, String>> {
+        java.util.zip.ZipInputStream(input).use { zip ->
+            while (true) {
+                val e = zip.nextEntry ?: return emptyList()
+                if (e.name.endsWith(".xml")) return parseTdb(zip)
+            }
+        }
+    }
+
+    fun parseTdb(input: java.io.InputStream): List<Pair<String, String>> {
+        val out = ArrayList<Pair<String, String>>()
+        val p = org.xmlpull.v1.XmlPullParserFactory.newInstance().newPullParser()
+        p.setInput(input, "UTF-8")
+        var inGame = false
+        var id: String? = null
+        var name: String? = null
+        var en: String? = null
+        var locale: String? = null
+        var ev = p.eventType
+        while (ev != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
+            if (ev == org.xmlpull.v1.XmlPullParser.START_TAG) when (p.name) {
+                "game" -> { inGame = true; id = null; en = null; locale = null; name = p.getAttributeValue(null, "name") }
+                "id" -> if (inGame && id == null) id = p.nextText().trim()
+                "locale" -> locale = p.getAttributeValue(null, "lang")
+                "title" -> if (inGame && locale == "EN" && en == null) en = p.nextText().trim()
+            } else if (ev == org.xmlpull.v1.XmlPullParser.END_TAG && p.name == "game") {
+                val title = en?.ifBlank { null } ?: name?.replace(Regex("""\s*\([^)]*\)\s*$"""), "")?.trim()
+                if (id != null && !title.isNullOrBlank()) out += id!! to title.replace('\t', ' ')
+                inGame = false
+            }
+            ev = p.next()
+        }
+        return out
+    }
     fun iconUrl(id: String) = "https://tinfoil.media/ti/$id/512/512/"
     fun pageUrl(id: String) = "https://tinfoil.media/Title/$id"
 

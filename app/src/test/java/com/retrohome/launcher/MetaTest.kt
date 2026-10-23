@@ -116,6 +116,7 @@ class MetaInTabsTest {
 }
 
 
+@org.junit.runner.RunWith(org.robolectric.RobolectricTestRunner::class)
 class ShortTitleMatchTest {
     @Test fun oneWordTitleDoesNotMatchLongerArticle() {
         // «The Captain» — другая игра, не «Captain Toad: Treasure Tracker»
@@ -126,6 +127,22 @@ class ShortTitleMatchTest {
         assertEquals(0, Wiki.similarity("Doom (1993 video game)", "Doom"))
         // Длинные названия по-прежнему находят статьи с уточнением
         assertEquals(1, Wiki.similarity("Skies of Arcadia Legends", "Skies of Arcadia"))
+    }
+
+    @Test fun shortTitles() {
+        assertTrue(Wiki.isShortTitle("The Captain"))
+        assertTrue(Wiki.isShortTitle("Okami"))
+        assertFalse(Wiki.isShortTitle("Captain Toad: Treasure Tracker"))
+    }
+
+    @Test fun gameTdbParse() {
+        val xml = """<?xml version="1.0" encoding="UTF-8"?><datafile><SwitchTDB version="1" games="2"/>
+            <game name="Pokémon Brilliant Diamond (EN,FR)"><id>AX7QA</id><type>Switch</type>
+            <locale lang="EN"><title>Pokémon Brilliant Diamond</title><synopsis>x</synopsis></locale>
+            <locale lang="FR"><title>Pokémon Diamant Étincelant</title></locale></game>
+            <game name="Some Game (JA)"><id>AAAAB</id><locale lang="JA"><title>ゲーム</title></locale></game></datafile>"""
+        val list = com.retrohome.launcher.data.SwitchDb.parseTdb(xml.byteInputStream())
+        assertEquals(listOf("AX7QA" to "Pokémon Brilliant Diamond", "AAAAB" to "Some Game"), list)
     }
 
     @Test fun oldWrongMatchIsDetected() {

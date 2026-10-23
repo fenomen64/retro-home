@@ -80,6 +80,7 @@ cd retro-home
 | wikipedia.org, wikidata.org | описания и факты; если вы указали почту, она передаётся в подписи запросов, как требуют правила Википедии |
 | raw.githubusercontent.com, api.github.com | запасной источник обложек (репозитории libretro-thumbnails), если сайт libretro недоступен |
 | searching.nintendo-europe.com, nintendo.com, assets.nintendo.eu | обложки игр Switch (каталог Nintendo Europe, поиск по Title ID) |
+| www.gametdb.com, art.gametdb.com | сканы коробок игр Switch (список игр раз в месяц, картинки по названию игры) |
 | tinfoil.media | обложки и описания игр Switch |
 | api.nlib.cc | запасной источник данных Switch (база TitleDB), если tinfoil недоступен |
 | api.github.com, github.com, release-assets.githubusercontent.com | обновления лаунчера: раз в пару минут — изменился ли список выпусков (условный запрос, без лишних данных) (можно выключить в Настройки → Обновление), по вашей команде — скачивание APK. Передаётся только номер версии лаунчера в User-Agent |
@@ -95,6 +96,7 @@ cd retro-home
 - [Википедия](https://www.wikipedia.org) и [Викиданные](https://www.wikidata.org): тексты описаний (CC BY-SA) и факты (CC0).
 - [RetroAchievements](https://retroachievements.org) и [rcheevos](https://github.com/RetroAchievements/rcheevos): правила подсчёта отпечатков файлов.
 - [tinfoil.media](https://tinfoil.media): база игр Switch.
+- [GameTDB](https://www.gametdb.com): сканы коробок игр Switch.
 
 Лаунчер не содержит игр и BIOS и не помогает их скачивать.
 
@@ -124,7 +126,7 @@ Download the APK from [Releases](../../releases), set Retro Home as the default 
 JDK 21 and the Android SDK (compileSdk 36): `./gradlew testDebugUnitTest assembleDebug`. To sign with your own key, copy `keystore.properties.example` to `keystore.properties`.
 
 ### Privacy
-No analytics or tracking. The only network requests go to libretro thumbnails (with the libretro-thumbnails GitHub repos as a fallback), Wikipedia/Wikidata, the Nintendo Europe catalog, tinfoil.media and api.nlib.cc (Switch) and RetroAchievements (only if you add your account).
+No analytics or tracking. The only network requests go to libretro thumbnails (with the libretro-thumbnails GitHub repos as a fallback), Wikipedia/Wikidata, the Nintendo Europe catalog, GameTDB, tinfoil.media and api.nlib.cc (Switch) and RetroAchievements (only if you add your account).
 
 ### License
 [GNU GPL v3.0](LICENSE).
