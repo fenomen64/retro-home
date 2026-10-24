@@ -172,6 +172,7 @@ interface SettingsActions {
     fun openDiagnostics() {}
     fun openUpdate() {}
     fun toggleRaCheck() {}
+    fun toggleSwitchCovers() {}
 }
 
 /** Заголовок раздела настроек. */
@@ -403,6 +404,10 @@ private fun androidx.compose.foundation.lazy.LazyListScope.settingsSection(
         }
         SettingsSection.DATA -> {
             item { ChoiceRow(s.autoMeta, if (settings.autoMeta) s.on else s.off, desc = s.autoMetaDesc, id = "first") { a.toggleAutoMeta() } }
+            item {
+                val sc = s.ext.switchCovers
+                ChoiceRow(sc.title, if (settings.switchCovers == "boxes") sc.boxes else sc.unified, desc = sc.desc, id = "switchCovers") { a.toggleSwitchCovers() }
+            }
             item {
                 FocusRow(onClick = a::editContact, id = "contact") {
                     TitleAndDesc(s.contactEmail, s.contactEmailDesc, settings.contactEmail ?: s.notSet)

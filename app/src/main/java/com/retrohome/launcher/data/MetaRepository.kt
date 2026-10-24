@@ -79,6 +79,8 @@ class MetaRepository(
     private val isOnline: (() -> Boolean)? = null,
     /** Почта для связи, которую пользователь указал для Википедии (с ней лимит запросов в 20 раз выше). */
     private val contact: () -> String? = { null },
+    /** Стиль обложек Switch: SWITCH_UNIFIED (по умолчанию) или SWITCH_BOXES. */
+    private val switchStyle: () -> String = { SWITCH_UNIFIED },
 ) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val metaFile = File(context.filesDir, "meta.json")
@@ -573,10 +575,11 @@ class MetaRepository(
         return Triple(out, Thumbnails.displayName(name), name)
     }
 
-    private fun saveCover(g: Game, bmp: Bitmap, suffix: String = ""): String {
+    private fun saveCover(g: Game, bmp: Bitmap, suffix: String = "", raw: Boolean = false): String {
         val out = "${g.id.hashCode().toUInt().toString(16)}$suffix.webp"
-        // Обложки Switch из разных источников разных пропорций — приводим к одной (как коробка Switch)
-        val img = if (g.system == GameSystem.SWITCH && suffix.isEmpty()) switchCase(bmp) else bmp
+        // Обложки Switch из разных источников разных пропорций — приводим к одной (как коробка Switch);
+        // raw — картинка уже нужной формы (наша обложка с полоской «SWITCH»)
+        val img = if (g.system == GameSystem.SWITCH && suffix.isEmpty() && !raw) switchCase(bmp) else bmp
         File(coversDir, out).outputStream().use { img.compress(Bitmap.CompressFormat.WEBP_LOSSY, 85, it) }
         if (img !== bmp) img.recycle()
         return out
@@ -586,6 +589,13 @@ class MetaRepository(
      * Один раз привести уже скачанные обложки Switch к одной пропорции (вызывать не в главном потоке, до загрузки). Файл сохраняется под
      * новым именем, чтобы экран сразу перечитал картинку. Только на устройстве, без интернета.
      */
+    /** Сменили стиль обложек Switch — все обложки Switch ищутся заново (старые остаются, пока нет новых). */
+    fun redoSwitchCovers(games: List<Game>) {
+        val ids = games.filter { it.system == GameSystem.SWITCH }.map { it.id }.toSet()
+        _meta.update { m -> m.mapValues { (k, v) -> if (k in ids) v.copy(coverTried = false) else v } }
+        save()
+    }
+
     fun normalizeSwitchCovers(games: List<Game>) {
         val prefs = context.getSharedPreferences("meta", Context.MODE_PRIVATE)
         if (prefs.getInt("switchCovers", 0) >= SWITCH_COVERS_VERSION) return
@@ -605,7 +615,7 @@ class MetaRepository(
                     dropped++
                     return@forEach
                 }
-                if (src.width == SWITCH_W && src.height == SWITCH_H) { src.recycle(); return@forEach }
+                if (src.width == SWITCH_W && src.height == SWITCH_H || src.width == CoverArt.W && src.height == CoverArt.H) { src.recycle(); return@forEach }
                 val out = switchCase(src)
                 val newName = "${g.id.hashCode().toUInt().toString(16)}_c${SWITCH_COVERS_VERSION}.webp"
                 val ok = runCatching { File(coversDir, newName).outputStream().use { out.compress(Bitmap.CompressFormat.WEBP_LOSSY, 85, it) } }.isSuccess
@@ -617,7 +627,7 @@ class MetaRepository(
                 fixed++
             }
             // Версия 2: появились настоящие сканы коробок (GameTDB); версия 3: без заглушек «Nintendo eShop»
-            // у цифровых игр; версия 5: своя «цифровая коробка». Обложки Switch один раз ищутся заново.
+            // у цифровых игр; версия 6: «единый стиль» с полоской «SWITCH». Обложки Switch один раз ищутся заново.
             // Старая обложка остаётся, пока новая не найдена.
             val switchIds = games.filter { it.system == GameSystem.SWITCH }.map { it.id }.toSet()
             _meta.update { m -> m.mapValues { (k, v) -> if (k in switchIds) v.copy(coverTried = false) else v } }
@@ -784,36 +794,29 @@ class MetaRepository(
     }
 
     private fun fetchSwitchCover(sw: SwitchLookup): Triple<String, String?, String?>? {
-        // Лучше всего — настоящий скан коробки из GameTDB (по названию игры)
-        tdbCover(sw)?.let { (box, name) ->
+        // «Коробки»: сначала настоящий скан коробки из GameTDB. «Единый стиль» (по умолчанию):
+        // у всех игр квадратная картинка из eShop с нашей полоской «SWITCH» сверху
+        val boxes = switchStyle() == SWITCH_BOXES
+        if (boxes) tdbCover(sw)?.let { (box, name) ->
             val out = saveCover(sw.game, box)
             box.recycle()
             return Triple(out, sw.name ?: name, name)
         }
         val id = sw.id ?: return null
-        // Иначе картинка из европейской базы Nintendo (часто квадратная — приводится к форме коробки)
-        val shownTitle = sw.eu?.title?.ifBlank { null } ?: sw.name ?: sw.game.title
-        sw.eu?.box?.let { url -> getBytes(url)?.let { BitmapFactory.decodeByteArray(it, 0, it.size) } }?.let { box ->
-            // Квадратная картинка вместо коробки — оформляем своей «цифровой коробкой»
-            val square = kotlin.math.abs(box.width.toFloat() / box.height - 1f) < 0.15f
-            val img = if (square) CoverArt.digitalCase(box, shownTitle) else box
-            val out = saveCover(sw.game, img)
-            if (img !== box) img.recycle()
-            box.recycle()
-            return Triple(out, sw.eu?.title?.ifBlank { null } ?: sw.name, null)
-        }
-        // Иначе квадратная картинка: Nintendo, затем tinfoil, затем Nlib
+        // «DIGITAL» — только у игр, которые не выходили на картриджах (по данным Nintendo Europe)
+        val badge = if (sw.eu?.physical == false) "DIGITAL" else null
         val icon = listOf(
             { sw.eu?.square?.let { getBytes(it) } },
             { tinfoil(SwitchDb.iconUrl(id)) },
             { getBytes(SwitchDb.nlibIconUrl(id)) },
+            // Последний вариант — картинка «коробки» из базы Nintendo (у цифровых игр она тоже квадратная)
+            { sw.eu?.box?.let { getBytes(it) } },
         ).firstNotNullOfOrNull { load -> load()?.let { BitmapFactory.decodeByteArray(it, 0, it.size) } } ?: return null.also { DiagLog.add("[SWITCH] ${sw.game.title}: иконка не загрузилась (${lastProblem.get() ?: "нет в базах"})") }
-        // Только квадратная картинка (игра из eShop) — своя «цифровая коробка» с названием
-        val case = CoverArt.digitalCase(icon, shownTitle)
-        val out = saveCover(sw.game, case)
+        val case = CoverArt.digitalCase(icon, badge)
+        val out = saveCover(sw.game, case, raw = true)
         case.recycle()
         icon.recycle()
-        return Triple(out, sw.name, null)
+        return Triple(out, sw.eu?.title?.ifBlank { null } ?: sw.name, null)
     }
 
     /**
@@ -1103,11 +1106,13 @@ class MetaRepository(
     }
 
     companion object {
-        const val VERSION = "0.52"
+        const val VERSION = "0.53"
         /** Размер обложек Switch: пропорции коробки Switch (≈ 0.62). */
         const val SWITCH_W = 400
         const val SWITCH_H = 645
-        const val SWITCH_COVERS_VERSION = 5
+        const val SWITCH_COVERS_VERSION = 6
+        const val SWITCH_UNIFIED = "unified"
+        const val SWITCH_BOXES = "boxes"
         /** Страница проекта — контакт в подписи запросов (Issues для связи). */
         const val PROJECT_URL = "https://github.com/fenomen64/retro-home"
         const val USER_AGENT = "RetroHome/$VERSION (personal Android game launcher)"

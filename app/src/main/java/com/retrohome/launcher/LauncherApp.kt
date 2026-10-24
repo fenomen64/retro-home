@@ -51,7 +51,7 @@ class LauncherApp : Application() {
         val store = Store(File(filesDir, "launcher.json"), scope)
         val apps = AppRepository(this, scope)
         controller = LauncherController(this, store, apps, GameLibrary(this, scope),
-            MetaRepository(this, scope, contact = { store.data.value.settings.contactEmail }), scope)
+            MetaRepository(this, scope, contact = { store.data.value.settings.contactEmail }, switchStyle = { store.data.value.settings.switchCovers }), scope)
     }
 }
 
@@ -402,6 +402,14 @@ class LauncherController(
     }
 
     fun raWatchNoPermission(): String = strings.ext.raWatch.noPermission
+
+    /** Стиль обложек Switch: единый ↔ коробки; обложки Switch перекачиваются. */
+    fun toggleSwitchCovers() {
+        store.update { d -> d.copy(settings = d.settings.copy(switchCovers = if (d.settings.switchCovers == "boxes") "unified" else "boxes")) }
+        val list = games.result.value.games
+        metas.redoSwitchCovers(list)
+        if (data.settings.autoMeta) metas.fetch(list, ::titleOverride)
+    }
 
     fun toggleRaCheck() {
         store.update { d -> d.copy(settings = d.settings.copy(raCheck = !d.settings.raCheck)) }

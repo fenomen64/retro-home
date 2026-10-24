@@ -770,13 +770,13 @@ object SwitchDb {
     // Точный поиск по номеру игры, есть и самые новые игры; картинки: коробка, квадрат, широкая
 
     private const val EU = "https://searching.nintendo-europe.com/en/select"
-    private const val EU_FIELDS = "title,application_id_s,image_url,image_url_sq_s,image_url_h16x9_s,system_names_txt"
+    private const val EU_FIELDS = "title,application_id_s,image_url,image_url_sq_s,image_url_h16x9_s,system_names_txt,physical_version_b"
 
     fun euByIdUrl(id: String) = "$EU?q=*&fq=application_id_s:${id.lowercase()}&rows=5&wt=json&fl=$EU_FIELDS"
     fun euByNameUrl(name: String) =
         "$EU?q=${java.net.URLEncoder.encode(name, "UTF-8")}&fq=type:GAME&rows=8&wt=json&fl=$EU_FIELDS"
 
-    data class EuGame(val id: String, val title: String, val box: String?, val square: String?, val wide: String?, val systems: List<String>)
+    data class EuGame(val id: String, val title: String, val box: String?, val square: String?, val wide: String?, val systems: List<String>, val physical: Boolean? = null)
 
     fun parseEu(json: String): List<EuGame> = runCatching {
         val docs = Json.parseToJsonElement(json).jsonObject["response"]?.jsonObject?.get("docs")?.jsonArray.orEmpty()
@@ -785,7 +785,7 @@ object SwitchDb {
             fun str(k: String) = (o[k] as? JsonPrimitive)?.contentOrNullSafe()?.takeIf { it.isNotBlank() }
             val id = str("application_id_s")?.uppercase() ?: return@mapNotNull null
             val systems = (o["system_names_txt"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNullSafe() }.orEmpty()
-            EuGame(id, clean(str("title") ?: ""), str("image_url"), str("image_url_sq_s"), str("image_url_h16x9_s"), systems)
+            EuGame(id, clean(str("title") ?: ""), str("image_url"), str("image_url_sq_s"), str("image_url_h16x9_s"), systems, str("physical_version_b")?.toBooleanStrictOrNull())
         }
     }.getOrDefault(emptyList())
 

@@ -41,6 +41,8 @@ data class Settings(
     val updateCheck: Boolean = true,
     /** Перед игрой с достижениями проверять сервер RetroAchievements и предупреждать уведомлением, если он недоступен. */
     val raCheck: Boolean = false,
+    /** Обложки Switch: "unified" — единый стиль (квадратная картинка с полоской), "boxes" — настоящие коробки. */
+    val switchCovers: String = "unified",
     /** A на игре открывает её страницу (false — сразу запускает). */
     val gamePage: Boolean = true,
     /** Тема оформления: night, oled, graphite, light. */

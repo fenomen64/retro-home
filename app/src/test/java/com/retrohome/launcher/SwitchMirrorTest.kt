@@ -148,6 +148,7 @@ class SwitchMirrorTest {
                 url.startsWith("https://searching.nintendo-europe.com/") && "application_id_s:0100f57025f44000" in url ->
                     HttpResponse(200, eu("0100F57025F44000", "Keep Driving", box = "https://www.nintendo.com/eu/box/kd.jpg").toByteArray())
                 url == "https://www.nintendo.com/eu/box/kd.jpg" -> HttpResponse(200, jpg)
+                "assets.nintendo.eu/sq/" in url -> HttpResponse(200, jpg)
                 "assets.nintendo.eu/wide" in url -> HttpResponse(200, jpg)
                 "tinfoil.media" in url -> HttpResponse(500)
                 "wikipedia.org" in url && "list=search" in url -> HttpResponse(200, """{"query":{"search":[]}}""".toByteArray())
@@ -156,7 +157,7 @@ class SwitchMirrorTest {
             }
         }
         val m = waitFor(r, keep)
-        assertNotNull("обложка — коробка из базы Nintendo", m.cover)
+        assertNotNull("обложка — квадратная картинка из базы Nintendo (единый стиль)", m.cover)
         assertEquals("Keep Driving", m.name)
         // За иконкой к tinfoil и Nlib уже не ходили
         assertTrue(calls.none { "tinfoil.media/ti/" in it || "/icon/" in it })

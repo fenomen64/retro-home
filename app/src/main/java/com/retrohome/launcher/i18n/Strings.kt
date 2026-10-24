@@ -537,6 +537,12 @@ val RU = Strings(
     pickMusicDesc = "Любой аудиофайл с устройства, будет играть по кругу",
     musicVolume = "Громкость музыки",
     ext = ExtStrings(
+        switchCovers = SwitchCoverStrings(
+            title = "Обложки Switch",
+            unified = "Единый стиль",
+            boxes = "Коробки",
+            desc = "Единый стиль — у всех игр картинка из eShop с полоской SWITCH (DIGITAL — у игр только из eShop). Коробки — настоящие сканы коробок, где они есть",
+        ),
         raWatch = RaWatchStrings(
             title = "Следить за RetroAchievements",
             desc = "Лаунчер проверяет сервер RetroAchievements раз в 5 минут (когда лаунчер закрыт — раз в 15 минут), а при запуске игры с достижениями — сразу. Уведомление приходит, только когда сервер перестал работать и когда снова заработал. Во время игры — ещё и если пропал интернет",
@@ -939,6 +945,12 @@ val EN = Strings(
     pickMusicDesc = "Any audio file from the device, played on a loop",
     musicVolume = "Music volume",
     ext = ExtStrings(
+        switchCovers = SwitchCoverStrings(
+            title = "Switch covers",
+            unified = "Uniform style",
+            boxes = "Boxes",
+            desc = "Uniform style — every game gets its eShop image with a SWITCH strip (DIGITAL for eShop-only games). Boxes — real box scans where available",
+        ),
         raWatch = RaWatchStrings(
             title = "Watch RetroAchievements",
             desc = "The launcher checks the RetroAchievements server every 5 minutes (every 15 minutes while it's closed), and right away when a game with achievements starts. You're notified only when the server goes down and when it's back. While playing — also if the internet drops",
@@ -1149,7 +1161,11 @@ data class ExtStrings(
     val menu: MenuStrings,
     val upd: UpdateStrings,
     val raWatch: RaWatchStrings,
+    val switchCovers: SwitchCoverStrings,
 )
+
+/** Настройка «Обложки Switch». */
+data class SwitchCoverStrings(val title: String, val unified: String, val boxes: String, val desc: String)
 
 /** Проверка RetroAchievements перед игрой. */
 data class RaWatchStrings(

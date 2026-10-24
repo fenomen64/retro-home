@@ -262,6 +262,7 @@ fun MainScreen(
                 if (!data.settings.raCheck) onRequestNotifications()
                 controller.toggleRaCheck()
             }
+            override fun toggleSwitchCovers() = controller.toggleSwitchCovers()
             override fun openNetworkCheck() = push(Screen.NETWORK_CHECK)
             override fun openDiagnostics() = push(Screen.DIAGNOSTICS)
             override fun openUpdate() = push(Screen.UPDATE)
