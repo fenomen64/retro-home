@@ -140,7 +140,8 @@ class ShortTitleMatchTest {
             <game name="Pokémon Brilliant Diamond (EN,FR)"><id>AX7QA</id><type>Switch</type>
             <locale lang="EN"><title>Pokémon Brilliant Diamond</title><synopsis>x</synopsis></locale>
             <locale lang="FR"><title>Pokémon Diamant Étincelant</title></locale></game>
-            <game name="Some Game (JA)"><id>AAAAB</id><locale lang="JA"><title>ゲーム</title></locale></game></datafile>"""
+            <game name="Some Game (JA)"><id>AAAAB</id><locale lang="JA"><title>ゲーム</title></locale></game>
+            <game name="The Captain (EN)"><id>A85HA</id><type>eShop</type><locale lang="EN"><title>The Captain</title></locale></game></datafile>"""
         val list = com.retrohome.launcher.data.SwitchDb.parseTdb(xml.byteInputStream())
         assertEquals(listOf("AX7QA" to "Pokémon Brilliant Diamond", "AAAAB" to "Some Game"), list)
     }

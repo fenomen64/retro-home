@@ -722,7 +722,11 @@ object SwitchDb {
     val TDB_REGIONS = listOf("EN", "US", "DE", "FR", "ES", "IT", "JA")
     fun tdbCoverUrl(region: String, id: String) = "https://art.gametdb.com/switch/coverM/$region/$id.jpg"
 
-    /** Из архива switchtdb.zip: (номер GameTDB, английское название). Читается потоком — файл большой. */
+    /**
+     * Из архива switchtdb.zip: (номер GameTDB, английское название). Читается потоком — файл большой.
+     * Только игры с настоящей коробкой: у цифровых (тип «eShop») GameTDB рисует заглушку —
+     * красный футляр с надписью Nintendo eShop и баннером, это не обложка.
+     */
     fun parseTdbZip(input: java.io.InputStream): List<Pair<String, String>> {
         java.util.zip.ZipInputStream(input).use { zip ->
             while (true) {
@@ -741,16 +745,18 @@ object SwitchDb {
         var name: String? = null
         var en: String? = null
         var locale: String? = null
+        var type: String? = null
         var ev = p.eventType
         while (ev != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
             if (ev == org.xmlpull.v1.XmlPullParser.START_TAG) when (p.name) {
-                "game" -> { inGame = true; id = null; en = null; locale = null; name = p.getAttributeValue(null, "name") }
+                "game" -> { inGame = true; id = null; en = null; locale = null; type = null; name = p.getAttributeValue(null, "name") }
+                "type" -> if (inGame) type = p.nextText().trim()
                 "id" -> if (inGame && id == null) id = p.nextText().trim()
                 "locale" -> locale = p.getAttributeValue(null, "lang")
                 "title" -> if (inGame && locale == "EN" && en == null) en = p.nextText().trim()
             } else if (ev == org.xmlpull.v1.XmlPullParser.END_TAG && p.name == "game") {
                 val title = en?.ifBlank { null } ?: name?.replace(Regex("""\s*\([^)]*\)\s*$"""), "")?.trim()
-                if (id != null && !title.isNullOrBlank()) out += id!! to title.replace('\t', ' ')
+                if (id != null && !title.isNullOrBlank() && !type.equals("eShop", ignoreCase = true)) out += id!! to title.replace('\t', ' ')
                 inGame = false
             }
             ev = p.next()

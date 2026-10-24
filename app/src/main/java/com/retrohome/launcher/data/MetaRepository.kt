@@ -609,7 +609,8 @@ class MetaRepository(
                 if (newName != name) file.delete()
                 fixed++
             }
-            // Версия 2: появились настоящие сканы коробок (GameTDB) — обложки Switch один раз ищутся заново.
+            // Версия 2: появились настоящие сканы коробок (GameTDB); версия 3: без заглушек «Nintendo eShop»
+            // у цифровых игр. Обложки Switch один раз ищутся заново.
             // Старая обложка остаётся, пока новая не найдена.
             val switchIds = games.filter { it.system == GameSystem.SWITCH }.map { it.id }.toSet()
             _meta.update { m -> m.mapValues { (k, v) -> if (k in switchIds) v.copy(coverTried = false) else v } }
@@ -666,7 +667,7 @@ class MetaRepository(
     private fun tdbIndex(): TdbIndex? {
         tdbIndex?.let { return it }
         if (System.currentTimeMillis() - tdbFailedAt < 10 * 60_000) return null
-        val file = File(indexDir, "SWITCH_gametdb.tsv")
+        val file = File(indexDir, "SWITCH_gametdb2.tsv")
         val fresh = file.exists() && System.currentTimeMillis() - file.lastModified() < 30L * 24 * 3600 * 1000
         fun cached() = file.readLines().mapNotNull { l -> l.split('\t', limit = 2).takeIf { it.size == 2 }?.let { it[0] to it[1] } }
         val entries = if (fresh) cached() else {
@@ -1067,11 +1068,11 @@ class MetaRepository(
     }
 
     companion object {
-        const val VERSION = "0.49"
+        const val VERSION = "0.50"
         /** Размер обложек Switch: пропорции коробки Switch (≈ 0.62). */
         const val SWITCH_W = 400
         const val SWITCH_H = 645
-        const val SWITCH_COVERS_VERSION = 2
+        const val SWITCH_COVERS_VERSION = 3
         /** Страница проекта — контакт в подписи запросов (Issues для связи). */
         const val PROJECT_URL = "https://github.com/fenomen64/retro-home"
         const val USER_AGENT = "RetroHome/$VERSION (personal Android game launcher)"

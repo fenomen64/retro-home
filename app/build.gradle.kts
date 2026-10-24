@@ -17,8 +17,8 @@ android {
         applicationId = "com.retrohome.launcher"
         minSdk = 29
         targetSdk = 35
-        versionCode = 51
-        versionName = "0.49"
+        versionCode = 52
+        versionName = "0.50"
     }
 
     // Ключ подписи хранится только локально, в keystore.properties (в репозиторий не попадает).
