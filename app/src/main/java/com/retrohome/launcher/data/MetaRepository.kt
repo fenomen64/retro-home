@@ -591,14 +591,21 @@ class MetaRepository(
         if (prefs.getInt("switchCovers", 0) >= SWITCH_COVERS_VERSION) return
         run {
             var fixed = 0
+            var dropped = 0
             games.filter { it.system == GameSystem.SWITCH }.forEach { g ->
                 val name = _meta.value[g.id]?.cover ?: return@forEach
                 val file = File(coversDir, name)
-                val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                BitmapFactory.decodeFile(file.path, opts)
-                if (opts.outWidth <= 0 || opts.outHeight <= 0) return@forEach
-                if (opts.outWidth == SWITCH_W && opts.outHeight == SWITCH_H) return@forEach
                 val src = BitmapFactory.decodeFile(file.path) ?: return@forEach
+                // Заглушка «Nintendo eShop» из GameTDB (красный футляр) — убираем сразу, не дожидаясь новой
+                // обложки: если сайты Switch сейчас недоступны, лучше пустая карточка, чем эта заглушка
+                if (isEshopPlaceholder(src)) {
+                    src.recycle()
+                    _meta.update { m -> m[g.id]?.let { m + (g.id to it.copy(cover = null, thumbName = null)) } ?: m }
+                    file.delete()
+                    dropped++
+                    return@forEach
+                }
+                if (src.width == SWITCH_W && src.height == SWITCH_H) { src.recycle(); return@forEach }
                 val out = switchCase(src)
                 val newName = "${g.id.hashCode().toUInt().toString(16)}_c${SWITCH_COVERS_VERSION}.webp"
                 val ok = runCatching { File(coversDir, newName).outputStream().use { out.compress(Bitmap.CompressFormat.WEBP_LOSSY, 85, it) } }.isSuccess
@@ -615,9 +622,29 @@ class MetaRepository(
             val switchIds = games.filter { it.system == GameSystem.SWITCH }.map { it.id }.toSet()
             _meta.update { m -> m.mapValues { (k, v) -> if (k in switchIds) v.copy(coverTried = false) else v } }
             if (fixed > 0) DiagLog.add("[SWITCH] обложки приведены к одному размеру: $fixed")
+            if (dropped > 0) DiagLog.add("[SWITCH] убраны заглушки «Nintendo eShop»: $dropped")
             save()
             prefs.edit().putInt("switchCovers", SWITCH_COVERS_VERSION).apply()
         }
+    }
+
+    /**
+     * Заглушка GameTDB для цифровых игр: сплошной тёмно-красный футляр (≈ RGB 192, 0, 16), баннер игры
+     * в середине. Проверяем поля слева и справа — у настоящих коробок там рисунок обложки.
+     */
+    private fun isEshopPlaceholder(b: Bitmap): Boolean {
+        if (b.width < 40 || b.height < 40) return false
+        var red = 0
+        var total = 0
+        for (x in listOf(0.04f, 0.96f)) for (i in 0 until 15) {
+            val c = b.getPixel((b.width * x).toInt(), (b.height * (0.2f + i * 0.05f)).toInt())
+            val r = android.graphics.Color.red(c)
+            val gg = android.graphics.Color.green(c)
+            val bb = android.graphics.Color.blue(c)
+            total++
+            if (r in 155..230 && gg < 45 && bb < 55) red++
+        }
+        return red >= total * 0.9
     }
 
     // --- Switch ---
@@ -1068,11 +1095,11 @@ class MetaRepository(
     }
 
     companion object {
-        const val VERSION = "0.50"
+        const val VERSION = "0.51"
         /** Размер обложек Switch: пропорции коробки Switch (≈ 0.62). */
         const val SWITCH_W = 400
         const val SWITCH_H = 645
-        const val SWITCH_COVERS_VERSION = 3
+        const val SWITCH_COVERS_VERSION = 4
         /** Страница проекта — контакт в подписи запросов (Issues для связи). */
         const val PROJECT_URL = "https://github.com/fenomen64/retro-home"
         const val USER_AGENT = "RetroHome/$VERSION (personal Android game launcher)"
