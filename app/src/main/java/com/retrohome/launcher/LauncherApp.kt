@@ -408,7 +408,8 @@ class LauncherController(
         store.update { d -> d.copy(settings = d.settings.copy(switchCovers = if (d.settings.switchCovers == "boxes") "unified" else "boxes")) }
         val list = games.result.value.games
         metas.redoSwitchCovers(list)
-        if (data.settings.autoMeta) metas.fetch(list, ::titleOverride)
+        // Начинаем заново, даже если загрузка уже идёт: иначе она доделает обложки в прежнем стиле
+        if (data.settings.autoMeta) metas.fetch(list, ::titleOverride, restart = true)
     }
 
     fun toggleRaCheck() {

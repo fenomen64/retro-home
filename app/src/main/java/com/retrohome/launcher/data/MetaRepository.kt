@@ -145,9 +145,10 @@ class MetaRepository(
      * Сначала для всех игр параллельно грузятся обложки и снимки экрана (сервер libretro не
      * ограничивает частоту), потом по одной — описания из Википедии.
      */
-    fun fetch(games: List<Game>, titleFor: (Game) -> String? = { null }, retryMissing: Boolean = false) {
-        // Уже идёт загрузка (или повтор, если просят повтор) — не начинаем заново, иначе она никогда не дойдёт до конца
-        if (job?.isActive == true && (!retryMissing || jobRetry)) { DiagLog.add("Загрузка уже идёт — новый запуск пропущен"); return }
+    fun fetch(games: List<Game>, titleFor: (Game) -> String? = { null }, retryMissing: Boolean = false, restart: Boolean = false) {
+        // Уже идёт загрузка (или повтор, если просят повтор) — не начинаем заново, иначе она никогда не дойдёт до конца.
+        // restart — начать заново всё равно (сменили стиль обложек: идущая загрузка делает их по-старому)
+        if (job?.isActive == true && !restart && (!retryMissing || jobRetry)) { DiagLog.add("Загрузка уже идёт — новый запуск пропущен"); return }
         job?.cancel()
         jobRetry = retryMissing
         if (retryMissing) { indexFailedAt.clear(); downUntil.clear() }
@@ -633,7 +634,7 @@ class MetaRepository(
                 fixed++
             }
             // Версия 2: появились настоящие сканы коробок (GameTDB); версия 3: без заглушек «Nintendo eShop»
-            // у цифровых игр; версия 6: «единый стиль» с полоской «SWITCH»; 7 — повтор (старая обложка могла остаться на экране). Обложки Switch один раз ищутся заново.
+            // у цифровых игр; версия 6: «единый стиль» с полоской «SWITCH»; 7 — повтор (старая обложка могла остаться на экране); 8 — повтор после исправления режима «Коробки». Обложки Switch один раз ищутся заново.
             // Старая обложка остаётся, пока новая не найдена.
             val switchIds = games.filter { it.system == GameSystem.SWITCH }.map { it.id }.toSet()
             _meta.update { m -> m.mapValues { (k, v) -> if (k in switchIds) v.copy(coverTried = false) else v } }
@@ -732,6 +733,12 @@ class MetaRepository(
         val hit = names.firstNotNullOfOrNull { n -> Thumbnails.match("x.nsp", idx.index, n) } ?: return null
         for (id in idx.idsByName[hit].orEmpty().take(3)) for (region in SwitchDb.TDB_REGIONS) {
             val bmp = getBytes(SwitchDb.tdbCoverUrl(region, id))?.let { BitmapFactory.decodeByteArray(it, 0, it.size) } ?: continue
+            // Скана коробки нет — GameTDB и для игр на картриджах может отдать заглушку «Nintendo eShop»
+            if (isEshopPlaceholder(bmp)) {
+                bmp.recycle()
+                DiagLog.add("[SWITCH] ${sw.game.title}: в GameTDB вместо коробки заглушка eShop ($id/$region) — пропускаю")
+                return null
+            }
             DiagLog.add("[SWITCH] ${sw.game.title}: коробка GameTDB $id/$region («$hit»)")
             return bmp to hit
         }
@@ -1112,11 +1119,11 @@ class MetaRepository(
     }
 
     companion object {
-        const val VERSION = "0.54"
+        const val VERSION = "0.55"
         /** Размер обложек Switch: пропорции коробки Switch (≈ 0.62). */
         const val SWITCH_W = 400
         const val SWITCH_H = 645
-        const val SWITCH_COVERS_VERSION = 7
+        const val SWITCH_COVERS_VERSION = 8
         const val SWITCH_UNIFIED = "unified"
         const val SWITCH_BOXES = "boxes"
         /** Страница проекта — контакт в подписи запросов (Issues для связи). */
