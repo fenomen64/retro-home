@@ -242,6 +242,10 @@ class MetaRepository(
             m = m.copy(snap = snap ?: old.snap, snapTried = old.snapTried && !force || !error)
         }
         finish(g, m, failed)
+        // Заменённые картинки больше не нужны
+        listOf(old.cover to m.cover, old.snap to m.snap).forEach { (was, now) ->
+            if (was != null && was != now) runCatching { File(coversDir, was).delete() }
+        }
     }
 
     private fun tag(g: Game) = "[${g.system.name}] ${g.title}"
@@ -576,7 +580,9 @@ class MetaRepository(
     }
 
     private fun saveCover(g: Game, bmp: Bitmap, suffix: String = "", raw: Boolean = false): String {
-        val out = "${g.id.hashCode().toUInt().toString(16)}$suffix.webp"
+        // Новое имя при каждом сохранении: экран кэширует картинки по имени файла, и с тем же именем
+        // показывал бы старую обложку до перезапуска. Старый файл удаляется после обновления данных.
+        val out = "${g.id.hashCode().toUInt().toString(16)}$suffix-${System.currentTimeMillis().toString(36)}.webp"
         // Обложки Switch из разных источников разных пропорций — приводим к одной (как коробка Switch);
         // raw — картинка уже нужной формы (наша обложка с полоской «SWITCH»)
         val img = if (g.system == GameSystem.SWITCH && suffix.isEmpty() && !raw) switchCase(bmp) else bmp
@@ -627,7 +633,7 @@ class MetaRepository(
                 fixed++
             }
             // Версия 2: появились настоящие сканы коробок (GameTDB); версия 3: без заглушек «Nintendo eShop»
-            // у цифровых игр; версия 6: «единый стиль» с полоской «SWITCH». Обложки Switch один раз ищутся заново.
+            // у цифровых игр; версия 6: «единый стиль» с полоской «SWITCH»; 7 — повтор (старая обложка могла остаться на экране). Обложки Switch один раз ищутся заново.
             // Старая обложка остаётся, пока новая не найдена.
             val switchIds = games.filter { it.system == GameSystem.SWITCH }.map { it.id }.toSet()
             _meta.update { m -> m.mapValues { (k, v) -> if (k in switchIds) v.copy(coverTried = false) else v } }
@@ -1106,11 +1112,11 @@ class MetaRepository(
     }
 
     companion object {
-        const val VERSION = "0.53"
+        const val VERSION = "0.54"
         /** Размер обложек Switch: пропорции коробки Switch (≈ 0.62). */
         const val SWITCH_W = 400
         const val SWITCH_H = 645
-        const val SWITCH_COVERS_VERSION = 6
+        const val SWITCH_COVERS_VERSION = 7
         const val SWITCH_UNIFIED = "unified"
         const val SWITCH_BOXES = "boxes"
         /** Страница проекта — контакт в подписи запросов (Issues для связи). */
